@@ -2,52 +2,48 @@
 
 ## Immediate next task (single executable unit)
 
-STAGE 2 — DATABASE: initial schema for auth/catalog foundation.
+STAGE 3 — AUTHENTICATION + RBAC (initial slice).
 
-Design and apply Supabase migrations for the minimum viable schema needed
-before auth (Stage 3) and catalog (Stage 4) can be built:
+Scope this into a first working slice rather than all of Stage 3 at once:
 
-1. `profiles` — one row per Supabase auth user (id references auth.users),
-   display name, role reference.
-2. `roles` and `permissions` (or a simpler role-enum on profiles if a full
-   RBAC table is premature at this point — decide and document the choice
-   in DECISIONS.md).
-3. `categories` — id, name, slug, parent_category_id (nullable, for
-   hierarchy), created_at.
-4. `products` — id, category_id, name, slug, description, price (integer
-   cents, never float), is_active, created_at, updated_at.
-5. `product_images` — id, product_id, storage_path, position, created_at.
-6. `inventory` — product_id (PK/unique), quantity_available, updated_at.
-   (inventory_movements table can wait until Stage 6/12 when order flow
-   needs to write to it — don't build unused tables yet per master
-   instructions section 10.)
-
-Requirements:
-- Every table: primary key, created_at, appropriate FKs/constraints/indexes,
-  correct nullability (per master instructions section 11).
-- Enable RLS on every table in `public` schema.
-- Write policies for the actual access pattern needed right now: anonymous +
-  authenticated users can SELECT active products/categories; only an
-  authenticated admin role can INSERT/UPDATE/DELETE. No admin role exists
-  yet (Stage 3), so for now restrict writes to the service role only and
-  document that write policies will be revisited once RBAC exists.
-- Apply migrations via Supabase MCP tools against project `hmsjerjguhxhwoubqdqm`.
-- Verify with `list_tables` (verbose) after applying.
-- Write the migration SQL files into `supabase/migrations/` in the repo too,
-  so schema history is in git, not just in Supabase.
-- Update `docs/DATABASE.md` (new file) describing the schema and relationships.
+1. `apps/web`: install `@supabase/supabase-js` (and `@supabase/ssr` if using
+   Next.js App Router server components/cookies properly — check current
+   docs, don't assume API shape from memory per master instructions rule 10).
+   Add `/register` and `/login` pages with real Supabase Auth email/password
+   sign-up and sign-in. Add a `/profile` page that is only reachable when
+   signed in (redirect to `/login` otherwise) and displays the user's
+   `profiles` row (display_name, role) fetched with the user's own session
+   (relying on the `profiles_select_own` RLS policy from Stage 2 — this is
+   the first real usage of that policy).
+2. `apps/api`: add a dependency/middleware that verifies the Supabase JWT
+   from the `Authorization` header on protected routes, and exposes the
+   authenticated user's id/role to route handlers. No protected routes exist
+   yet to use it on — this stage just builds and unit-tests the verification
+   dependency itself (e.g. against a `/me` endpoint that echoes back the
+   verified user id and role).
+3. Do NOT build the full RBAC permissions-table system yet — the `profiles.role`
+   enum from Stage 2 is sufficient for now. Document in DECISIONS.md if this
+   changes.
+4. `.env.example`: confirm the Supabase anon key placeholder section is
+   actually sufficient for what apps/web needs now that real auth calls
+   are being made (update if a new env var is needed, e.g. cookie
+   configuration).
 
 ## Definition of done for this task
-- Tables exist and verified via `list_tables`
-- RLS enabled on all new tables, verified by attempting an anonymous
-  read/write and confirming the expected allow/deny behavior
-- Migration SQL committed under `supabase/migrations/`
-- `docs/DATABASE.md` created
-- Commit message: `feat: Stage 2 database schema (categories, products, inventory)`
+- Manual signup creates a real `auth.users` row and a matching `profiles`
+  row (verified via Supabase, not just "should work")
+- Login/logout works end-to-end in the running dev server (verified via
+  bash tool + curl or a scripted check, not just visual inspection claims)
+- `/profile` correctly redirects unauthenticated visitors and correctly
+  shows data for authenticated ones
+- API JWT-verification dependency has a passing test for both valid and
+  invalid/missing tokens
+- No secrets committed; `.env.example` updated if new vars were introduced
+- Commit message: `feat: Stage 3 auth slice (web sign-up/login/profile, api JWT verification)`
 - Pushed to origin/main
 - PROJECT_STATE.md and this file updated afterward
 
 ## After this task
-Stage 3 — Authentication + RBAC: Supabase Auth wiring in apps/web and
-apps/api, register/login/logout, protected routes, and a real role model
-(revisit the roles/permissions decision made in this stage).
+Continue Stage 3: password recovery, session refresh handling, and the
+first real RBAC-gated action (e.g. an admin-only endpoint) before moving to
+Stage 4 (product catalog CRUD + admin UI).

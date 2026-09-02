@@ -59,3 +59,66 @@
 - No auth, RBAC, or any business logic implemented yet.
 
 **Next task:** see NEXT_TASK.md (Stage 2 — database schema).
+
+## Session 1 (continued) — Stage 2: Database
+
+**What I did:**
+Designed and applied 6 migrations to the live Supabase project via the
+Supabase MCP tools (not manual SQL copy-paste): `profiles` (with an
+auto-provisioning trigger on `auth.users` signup), `categories`, `products`,
+`product_images`, `inventory`, then two follow-up migrations fixing real
+findings from Supabase's own security/performance advisors.
+
+**Decisions made (see DECISIONS.md for the full versions):**
+- Used a simple `role` text-enum on `profiles` instead of full
+  roles/permissions tables — full RBAC deferred to when Stage 3 actually
+  needs it, per "don't build tables just for appearance."
+- Deferred `inventory_movements` (audit trail) to Stage 6 for the same
+  reason — only `inventory.quantity_available` exists for now.
+- Prices are `integer` cents (`price_cents`), never float, and never
+  writable by anon/authenticated clients.
+
+**Verification performed (not claimed without evidence):**
+- `list_tables(verbose=true)` confirmed all 5 tables exist with correct
+  columns, PKs, FKs, and `rls_enabled: true`.
+- Inserted real test/seed rows (one active product, one inactive "draft"
+  product, one category, one inventory row), then actually switched to the
+  `anon` Postgres role inside a rolled-back transaction — the same role
+  PostgREST uses for unauthenticated REST calls — and confirmed:
+  - anon SELECT on products returns only the active one (draft correctly
+    hidden)
+  - anon SELECT on categories/inventory succeeds
+  - anon UPDATE on inventory affects 0 rows and the value is provably
+    unchanged afterward
+  - anon INSERT on products raises an explicit
+    `42501 row-level security policy` error
+  - anon SELECT on profiles returns 0 rows
+- All test/seed data deleted afterward; tables verified back to 0 rows.
+- Ran `get_advisors(type=security)` — found 2 real issues (mutable
+  `search_path` on a trigger function; a `SECURITY DEFINER` function
+  directly callable via PostgREST RPC by anon/authenticated). First fix
+  attempt (revoking EXECUTE from the named roles) was verified insufficient
+  — checked `information_schema.role_routine_grants` directly and found
+  `PUBLIC` still held the grant, which anon/authenticated inherit. Fixed
+  correctly by revoking from `PUBLIC`. Re-ran the advisor: 0 findings.
+  Then verified the auth signup trigger still worked after the revoke by
+  inserting directly into `auth.users` and confirming a `profiles` row was
+  auto-created (triggers execute as the function owner, not the calling
+  role, so the revoke doesn't break the trigger's own operation).
+- Ran `get_advisors(type=performance)` — found `auth.uid()` being
+  re-evaluated per-row in the profiles policy. Fixed by wrapping it in a
+  scalar subquery. Re-ran: that finding cleared; one INFO-level "unused
+  index" note remains, expected on a currently-empty freshly-created table,
+  not actionable yet.
+
+**Files changed:** `supabase/migrations/0001_profiles.sql` through
+`0006_optimize_rls_initplan.sql`, `docs/DATABASE.md` (new), plus updates to
+`docs/PROJECT_STATE.md` and `docs/NEXT_TASK.md`.
+
+**Not yet done / explicitly not claimed:**
+- No Supabase Storage buckets yet (needed for product images, Stage 4/25).
+- No real auth/signup flow in the actual apps yet — Stage 3.
+- No admin write path exists yet for products/categories — currently only
+  reachable via the service role directly (by design, until RBAC exists).
+
+**Next task:** see NEXT_TASK.md (Stage 3 — authentication + RBAC, initial slice).

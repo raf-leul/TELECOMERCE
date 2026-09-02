@@ -3,12 +3,13 @@
 Last updated: 2026-09-02 (session 1)
 
 ## Current Stage
-STAGE 1 — FOUNDATION (complete, verified green in CI)
+STAGE 2 — DATABASE (complete, RLS-verified)
 
 ## Current Milestone
-Tool setup complete. Web + API skeletons scaffolded, built, tested, linted
-locally AND verified passing in GitHub Actions CI (run id 33598029310,
-conclusion: success).
+Initial schema (profiles, categories, products, product_images, inventory)
+applied as 6 real migrations to the live Supabase project, RLS enabled and
+actually tested (not just enabled-and-assumed), security/performance
+advisors run and all findings resolved.
 
 ## What Is Complete
 - GitHub repo verified: https://github.com/raf-leul/TELECOMERCE (push access confirmed,
@@ -29,18 +30,26 @@ conclusion: success).
   **Verified actually green on GitHub Actions**, not just locally
   (run id 33598029310, https://github.com/raf-leul/TELECOMERCE/actions).
 - `docs/ARCHITECTURE.md`, `docs/DECISIONS.md`, `docs/DEVELOPMENT_LOG.md` created.
+- STAGE 2: `profiles`, `categories`, `products`, `product_images`, `inventory`
+  tables created via 6 migrations (see docs/DATABASE.md for full detail).
+  RLS enabled on all tables. Security advisor: 0 findings (2 real findings
+  caught and fixed). Performance advisor: 1 real finding caught and fixed
+  (1 expected/non-actionable INFO note remains on an empty table).
+  RLS behavior actually verified against the live database (anon role
+  read/write tests), not just assumed from the policy SQL.
+  `docs/DATABASE.md` created documenting schema + verification evidence.
 
 ## What Is Partially Complete
-Nothing partially complete right now — Stage 1 scope is finished and verified.
+Nothing partially complete right now — Stage 2 scope is finished and verified.
 
 ## What Was Last Changed
-Fixed two real CI failures found only by actually running the pipeline
-(not assumed): (1) npm workspace + subdirectory lockfile mismatch causing
-`npm ci` to fail, (2) pytest module import path issue causing test collection
-to fail in a clean environment. Both fixed and re-verified green.
+Applied Stage 2 database migrations, ran and fixed both Supabase advisor
+categories (security + performance), and manually verified RLS enforcement
+by switching to the `anon` Postgres role and testing real reads/writes
+against live tables (not just reading policy definitions).
 
 ## Latest Commit
-eff9511 (fix: correct CI failures (workspace lockfile location, pytest import path)) — pushed to origin/main
+(pending — will be updated after this session's docs+migrations commit is pushed)
 
 ## Current Branch
 main
@@ -82,9 +91,14 @@ See NEXT_TASK.md. Short version: scaffold apps/web (Next.js/TS/Tailwind), apps/a
 minimal CI workflow. Then commit + push as the Stage 1 checkpoint.
 
 ## Migration / Deployment State
-- No database migrations exist yet.
+- 6 database migrations applied and verified (see docs/DATABASE.md):
+  0001_profiles, 0002_catalog, 0003_inventory, 0004_security_hardening,
+  0005_fix_public_execute_grant, 0006_optimize_rls_initplan.
+- All public-schema tables have RLS enabled with verified-correct policies.
 - No Vercel project linked/deployed yet.
-- No Supabase Auth/Storage/RLS configured yet.
+- No Supabase Storage buckets created yet (needed once product image upload
+  is built, Stage 4/25).
+- No real users/auth flow exists yet — Stage 3.
 
 ## Environment Variable Notes
 Supabase project credentials obtained this session (safe, publishable-only):
@@ -97,8 +111,8 @@ Supabase project credentials obtained this session (safe, publishable-only):
 - No payment provider secrets exist yet.
 
 ## Exact Next Recommended Action
-Begin STAGE 2 — DATABASE: design the initial Supabase schema (users/profiles,
-roles/permissions, categories, products, product_images, inventory), write it
-as SQL migrations under `supabase/migrations/`, apply via Supabase MCP tools,
-verify with `list_tables`, enable RLS with least-privilege policies, and
-commit the migration files. See NEXT_TASK.md for the precise breakdown.
+Begin STAGE 3 — AUTHENTICATION + RBAC: wire Supabase Auth into apps/web
+(sign up/log in/log out, session handling) and apps/api (verifying the
+Supabase JWT on protected endpoints), build protected route patterns, and
+decide/implement how `profiles.role` gates access to admin-only operations.
+See NEXT_TASK.md for the precise breakdown.
