@@ -33,11 +33,27 @@
 - Created `docs/PROJECT_STATE.md`, `docs/NEXT_TASK.md`, `docs/ARCHITECTURE.md`,
   `docs/DECISIONS.md`, this log.
 
+**CI verification (same session, continued):**
+- First push of `.github/workflows/ci.yml` was rejected — the classic PAT
+  had `repo` scope only, not `workflow`. Regenerated token with both scopes.
+- First actual CI run failed both jobs. Did not assume the fix — pulled job
+  step statuses via the GitHub API, then reproduced each failure locally:
+  - Web job: `npm ci` failed. Root cause: root `package.json` declares
+    `apps/web` as an npm workspace, so npm operations run from within
+    `apps/web` now expect the lockfile at repo root, which didn't exist.
+    Fix: `npm install` from repo root to generate the root lockfile, removed
+    the stale one in `apps/web`, changed CI to run `npm ci` from root and
+    use `npm run web:lint` / `npm run web:build`.
+  - API job: `pytest` failed with `ModuleNotFoundError: No module named 'app'`
+    when run in a genuinely fresh venv (my first local pytest run had
+    passed only because of leftover interpreter/env state — a lesson in why
+    Rule 6 requires real verification, not just "it worked once"). Fix:
+    added `apps/api/pytest.ini` with `pythonpath = .`.
+- Re-pushed, polled the new Actions run to completion via API: **status
+  completed, conclusion success** (run id 33598029310). This is the actual
+  verification evidence for the "CI passes" claim in PROJECT_STATE.md.
+
 **Not yet done / explicitly not claimed:**
-- CI workflow has not actually been run on GitHub Actions yet — only the
-  underlying commands (`npm run build`, `npm run lint`, `pytest`,
-  `ruff check`) were verified locally. Will confirm the Actions run itself
-  after pushing.
 - No database schema/migrations yet (Stage 2).
 - No Vercel project linked/deployed yet.
 - No auth, RBAC, or any business logic implemented yet.

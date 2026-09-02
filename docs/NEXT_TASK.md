@@ -2,31 +2,52 @@
 
 ## Immediate next task (single executable unit)
 
-Scaffold the Stage 1 foundation:
+STAGE 2 — DATABASE: initial schema for auth/catalog foundation.
 
-1. `apps/web`: minimal Next.js 14 (App Router) + TypeScript + Tailwind CSS project
-   with a placeholder home page ("TeleCommerce — coming soon") and a working
-   `npm run build`.
-2. `apps/api`: minimal FastAPI project with `app/main.py` exposing `GET /health`
-   returning `{"status": "ok"}`, plus `requirements/base.txt` and a working
-   `uvicorn app.main:app` boot.
-3. Root `.env.example` documenting all env vars referenced in this file, with
-   real (safe, publishable) Supabase URL/key placeholders and comments — no
-   secrets.
-4. Root `package.json` (npm workspaces) wiring `apps/web` as a workspace.
-5. `.gitignore` covering node_modules, .next, __pycache__, .venv, .env*.local.
-6. Basic `.github/workflows/ci.yml`: install + lint + build for apps/web only
-   (backend CI added once apps/api has real dependencies to check).
+Design and apply Supabase migrations for the minimum viable schema needed
+before auth (Stage 3) and catalog (Stage 4) can be built:
+
+1. `profiles` — one row per Supabase auth user (id references auth.users),
+   display name, role reference.
+2. `roles` and `permissions` (or a simpler role-enum on profiles if a full
+   RBAC table is premature at this point — decide and document the choice
+   in DECISIONS.md).
+3. `categories` — id, name, slug, parent_category_id (nullable, for
+   hierarchy), created_at.
+4. `products` — id, category_id, name, slug, description, price (integer
+   cents, never float), is_active, created_at, updated_at.
+5. `product_images` — id, product_id, storage_path, position, created_at.
+6. `inventory` — product_id (PK/unique), quantity_available, updated_at.
+   (inventory_movements table can wait until Stage 6/12 when order flow
+   needs to write to it — don't build unused tables yet per master
+   instructions section 10.)
+
+Requirements:
+- Every table: primary key, created_at, appropriate FKs/constraints/indexes,
+  correct nullability (per master instructions section 11).
+- Enable RLS on every table in `public` schema.
+- Write policies for the actual access pattern needed right now: anonymous +
+  authenticated users can SELECT active products/categories; only an
+  authenticated admin role can INSERT/UPDATE/DELETE. No admin role exists
+  yet (Stage 3), so for now restrict writes to the service role only and
+  document that write policies will be revisited once RBAC exists.
+- Apply migrations via Supabase MCP tools against project `hmsjerjguhxhwoubqdqm`.
+- Verify with `list_tables` (verbose) after applying.
+- Write the migration SQL files into `supabase/migrations/` in the repo too,
+  so schema history is in git, not just in Supabase.
+- Update `docs/DATABASE.md` (new file) describing the schema and relationships.
 
 ## Definition of done for this task
-- `npm run build` succeeds in apps/web (verified via bash tool)
-- FastAPI app boots and `/health` returns 200 (verified via bash tool + curl)
-- No secrets committed (verified via `git diff` review before commit)
-- Commit message: `feat: Stage 1 foundation scaffold (web + api skeletons)`
+- Tables exist and verified via `list_tables`
+- RLS enabled on all new tables, verified by attempting an anonymous
+  read/write and confirming the expected allow/deny behavior
+- Migration SQL committed under `supabase/migrations/`
+- `docs/DATABASE.md` created
+- Commit message: `feat: Stage 2 database schema (categories, products, inventory)`
 - Pushed to origin/main
 - PROJECT_STATE.md and this file updated afterward
 
 ## After this task
-Stage 2 — Database: design initial schema (users/profiles, categories, products,
-product_images, inventory) as Supabase migrations, apply via Supabase MCP tools,
-verify with list_tables, enable RLS, commit the migration files.
+Stage 3 — Authentication + RBAC: Supabase Auth wiring in apps/web and
+apps/api, register/login/logout, protected routes, and a real role model
+(revisit the roles/permissions decision made in this stage).
