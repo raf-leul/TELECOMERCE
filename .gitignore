@@ -1,0 +1,39 @@
+# --- Node / Next.js (apps/web) ---
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.turbo/
+
+# --- Python (apps/api, apps/bot) ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# --- Env files (never commit real secrets) ---
+.env
+.env.local
+.env.*.local
+apps/web/.env*
+apps/api/.env*
+apps/bot/.env*
+!.env.example
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Logs ---
+*.log
+npm-debug.log*
+
+# --- Supabase local dev ---
+supabase/.branches
+supabase/.temp

@@ -1,0 +1,14 @@
+{
+  "name": "telecommerce",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Multi-channel commerce platform: shared backend, web storefront, and Telegram bot.",
+  "workspaces": [
+    "apps/web"
+  ],
+  "scripts": {
+    "web:dev": "npm run dev --workspace=apps/web",
+    "web:build": "npm run build --workspace=apps/web",
+    "web:lint": "npm run lint --workspace=apps/web"
+  }
+}
