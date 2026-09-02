@@ -49,7 +49,7 @@ by switching to the `anon` Postgres role and testing real reads/writes
 against live tables (not just reading policy definitions).
 
 ## Latest Commit
-(pending — will be updated after this session's docs+migrations commit is pushed)
+d6af673 (feat: Stage 2 database schema (categories, products, inventory)) — pushed to origin/main, CI green (run id 33646564205)
 
 ## Current Branch
 main
