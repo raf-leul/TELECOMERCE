@@ -122,3 +122,69 @@ findings from Supabase's own security/performance advisors.
   reachable via the service role directly (by design, until RBAC exists).
 
 **Next task:** see NEXT_TASK.md (Stage 3 — authentication + RBAC, initial slice).
+
+## Session 1 (continued) — Stage 3: Authentication (initial slice)
+
+**What I did:**
+Checked current Supabase docs before writing any code (Rule 10) rather than
+relying on training-data memory of a fast-moving library. Confirmed the
+current recommended pattern is `@supabase/ssr` with `createBrowserClient`/
+`createServerClient`, a `proxy.ts` file (Next.js 16's renamed
+`middleware.ts`) using `updateSession()`, and `getClaims()` (not
+`getSession()`) for gating access to pages/data.
+
+Built:
+- `apps/web/lib/supabase/{client,server,proxy}.ts` — the three Supabase
+  client utilities per current docs.
+- `apps/web/proxy.ts` — wires `updateSession` into Next's proxy convention.
+- `apps/web/app/auth/actions.ts` — Server Actions for sign-up/sign-in/sign-out.
+- `apps/web/app/{register,login,profile}/page.tsx` — the three pages,
+  using React 19's `useActionState` (confirmed React 19 is what
+  `create-next-app` installed, not the older `useFormState`).
+- `apps/api/app/auth/security.py` — JWT verification against Supabase's
+  JWKS endpoint (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json`) via
+  PyJWT's `PyJWKClient`, exposed as a FastAPI dependency.
+- `apps/api/app/main.py` — added `/me`, a minimal endpoint to prove the
+  verification dependency works.
+- `apps/api/tests/test_auth.py` — 4 new tests.
+
+**A real limitation found and documented, not glossed over:**
+While trying to verify the signup flow end-to-end, direct testing (both
+`curl` against the Supabase REST host and a Node script calling
+`supabase.auth.signUp()`) showed this sandbox's network egress allowlist
+does not include `*.supabase.co` — every attempt failed with "Host not in
+allowlist" from the egress proxy, not an application error. This means the
+Supabase MCP tools (which go through a separate, permitted channel) could
+verify the Stage 2 database directly, but nothing in this session could
+verify a real signup/login/session through the actual running apps against
+real Supabase Auth.
+
+**What WAS actually verified (not claimed without evidence):**
+- `apps/web`: clean `npm run build` (with `proxy.ts` confirmed picked up
+  via the "ƒ Proxy (Middleware)" build output line) and clean
+  `npm run lint`. Booted the real dev server and curl-tested `/`, `/login`,
+  `/register` (200) and unauthenticated `/profile` (307 → `/login` —
+  this specific check doesn't need Supabase network access, since an
+  absent cookie is decided locally).
+- `apps/api`: 5/5 pytest passing in a fresh venv, including 4 new auth
+  tests. The valid/expired-token tests sign real JWTs with a locally
+  generated RSA keypair and monkeypatch the JWKS client so the actual
+  cryptographic verification path is exercised, just against a test key.
+  Booted the real uvicorn server and curl-tested `/health` (200) and `/me`
+  without/with a garbage token (401/401). Clean `ruff check .`.
+
+**What was explicitly NOT verified, and is called out as such rather than
+assumed:** a real signup creating an `auth.users` + `profiles` row through
+the app, a real login setting a working cookie, the profile page rendering
+real data, and `/me` against a real Supabase-issued token. All deferred to
+NEXT_TASK.md with instructions to verify from an environment with real
+network access before Stage 3 is considered done.
+
+**Files changed:** see PROJECT_STATE.md "What Is Complete" for the full
+list; docs updated: `docs/DECISIONS.md` (4 new entries), `docs/PROJECT_STATE.md`,
+`docs/NEXT_TASK.md`, this log.
+
+**Next task:** see NEXT_TASK.md — real end-to-end verification of this
+slice from a network-capable environment, then finish the rest of Stage 3
+(password recovery, session refresh check, one RBAC-gated example) before
+moving to Stage 4.

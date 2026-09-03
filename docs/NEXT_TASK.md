@@ -2,48 +2,62 @@
 
 ## Immediate next task (single executable unit)
 
-STAGE 3 — AUTHENTICATION + RBAC (initial slice).
+STAGE 3 — real end-to-end verification of the auth slice, then close out
+the rest of Stage 3.
 
-Scope this into a first working slice rather than all of Stage 3 at once:
+This sandbox cannot reach `*.supabase.co` over the network (confirmed by a
+direct test — see docs/DECISIONS.md), so the auth code written this session
+(apps/web register/login/profile pages + apps/api /me endpoint) has only
+been verified at the unit/build/lint level, not end-to-end against real
+Supabase Auth. Before adding more auth features, verify what already
+exists actually works:
 
-1. `apps/web`: install `@supabase/supabase-js` (and `@supabase/ssr` if using
-   Next.js App Router server components/cookies properly — check current
-   docs, don't assume API shape from memory per master instructions rule 10).
-   Add `/register` and `/login` pages with real Supabase Auth email/password
-   sign-up and sign-in. Add a `/profile` page that is only reachable when
-   signed in (redirect to `/login` otherwise) and displays the user's
-   `profiles` row (display_name, role) fetched with the user's own session
-   (relying on the `profiles_select_own` RLS policy from Stage 2 — this is
-   the first real usage of that policy).
-2. `apps/api`: add a dependency/middleware that verifies the Supabase JWT
-   from the `Authorization` header on protected routes, and exposes the
-   authenticated user's id/role to route handlers. No protected routes exist
-   yet to use it on — this stage just builds and unit-tests the verification
-   dependency itself (e.g. against a `/me` endpoint that echoes back the
-   verified user id and role).
-3. Do NOT build the full RBAC permissions-table system yet — the `profiles.role`
-   enum from Stage 2 is sufficient for now. Document in DECISIONS.md if this
-   changes.
-4. `.env.example`: confirm the Supabase anon key placeholder section is
-   actually sufficient for what apps/web needs now that real auth calls
-   are being made (update if a new env var is needed, e.g. cookie
-   configuration).
+1. Run `apps/web` (`npm run web:dev`) somewhere with real network access
+   (locally, Vercel preview, or a future session with different network
+   permissions) and confirm:
+   - `/register` with a real email+password creates a row in `auth.users`
+     AND a matching row in `public.profiles` (check via Supabase
+     `execute_sql` or the dashboard).
+   - `/login` with those same credentials succeeds and redirects to
+     `/profile`.
+   - `/profile` renders the real `display_name`/`role`/`created_at` for
+     that user (proves the `profiles_select_own` RLS policy works through
+     the actual app, not just via a simulated `set local role anon`
+     Postgres session as was done in Stage 2).
+   - "Log out" on `/profile` actually clears the session and subsequent
+     visits to `/profile` redirect to `/login` again.
+2. Run `apps/api` (`uvicorn app.main:app`) and confirm `/me` with a real
+   Supabase-issued access token (grab one from the browser's session after
+   step 1, or via `supabase.auth.getSession()` in a script) returns 200
+   with the correct `id`.
+3. Fix anything that breaks during this real-world test — don't assume the
+   unit tests fully cover it, since they intentionally mock the network
+   boundary.
+4. Once verified, finish the remaining Stage 3 scope:
+   - Password recovery flow (`/forgot-password`, Supabase's reset-password
+     email + confirm page).
+   - Confirm session refresh actually works past the access token's
+     expiry (proxy.ts should handle this — verify, don't assume).
+   - Add one real RBAC-gated example: an endpoint or page reachable only
+     when `profiles.role` is `admin`/`owner`, to prove the pattern before
+     Stage 4 builds real admin CRUD on top of it.
 
 ## Definition of done for this task
-- Manual signup creates a real `auth.users` row and a matching `profiles`
-  row (verified via Supabase, not just "should work")
-- Login/logout works end-to-end in the running dev server (verified via
-  bash tool + curl or a scripted check, not just visual inspection claims)
-- `/profile` correctly redirects unauthenticated visitors and correctly
-  shows data for authenticated ones
-- API JWT-verification dependency has a passing test for both valid and
-  invalid/missing tokens
-- No secrets committed; `.env.example` updated if new vars were introduced
-- Commit message: `feat: Stage 3 auth slice (web sign-up/login/profile, api JWT verification)`
+- All four end-to-end checks in step 1-2 above actually performed with
+  evidence (screenshots, curl output, or SQL query results — not just "it
+  should work")
+- Password recovery, session refresh, and the RBAC-gated example built and
+  verified the same way
+- Any bugs found during real-world testing fixed and re-verified
+- `.env.example` updated if new vars were introduced (e.g. for
+  password-reset redirect URLs)
+- Commit message: `feat: Stage 3 complete — verified auth flow, password recovery, RBAC example`
 - Pushed to origin/main
-- PROJECT_STATE.md and this file updated afterward
+- PROJECT_STATE.md and this file updated afterward, replacing the
+  "could not verify" caveats with real verification evidence
 
 ## After this task
-Continue Stage 3: password recovery, session refresh handling, and the
-first real RBAC-gated action (e.g. an admin-only endpoint) before moving to
-Stage 4 (product catalog CRUD + admin UI).
+Stage 4 — Product catalog: categories/products CRUD in apps/api (admin-only,
+enforced via the RBAC pattern just built), storefront browsing/search/filter
+pages in apps/web, admin product management UI, Supabase Storage bucket for
+product images.

@@ -1,15 +1,17 @@
 # PROJECT_STATE.md
 
-Last updated: 2026-09-02 (session 1)
+Last updated: 2026-09-03 (session 1, continued)
 
 ## Current Stage
-STAGE 2 — DATABASE (complete, RLS-verified)
+STAGE 3 — AUTHENTICATION + RBAC (initial slice complete; partially verified —
+see caveats below)
 
 ## Current Milestone
-Initial schema (profiles, categories, products, product_images, inventory)
-applied as 6 real migrations to the live Supabase project, RLS enabled and
-actually tested (not just enabled-and-assumed), security/performance
-advisors run and all findings resolved.
+Supabase Auth wired into apps/web (register/login/profile pages, Server
+Actions, proxy.ts session refresh) and a JWT-verification dependency wired
+into apps/api (/me endpoint). Code-level and unit-test verification done;
+live end-to-end network verification NOT possible from this sandbox (see
+"What Was Tested" and DECISIONS.md).
 
 ## What Is Complete
 - GitHub repo verified: https://github.com/raf-leul/TELECOMERCE (push access confirmed,
@@ -38,18 +40,33 @@ advisors run and all findings resolved.
   RLS behavior actually verified against the live database (anon role
   read/write tests), not just assumed from the policy SQL.
   `docs/DATABASE.md` created documenting schema + verification evidence.
+- STAGE 3 (initial slice): `apps/web` — @supabase/ssr wired up
+  (lib/supabase/client.ts, server.ts, proxy.ts), `/register`, `/login`,
+  `/profile` pages, Server Actions for sign-up/sign-in/sign-out
+  (app/auth/actions.ts). `apps/api` — JWT verification dependency against
+  Supabase's JWKS (app/auth/security.py) with a `/me` endpoint, 4 passing
+  unit tests (missing token, garbage token, expired token, valid token —
+  the valid/expired cases sign real JWTs with a locally generated RSA
+  keypair and monkeypatch the JWKS client, so no network access to
+  Supabase is needed for these tests to be meaningful).
 
 ## What Is Partially Complete
-Nothing partially complete right now — Stage 2 scope is finished and verified.
+Stage 3's initial slice is code-complete and locally verified where
+possible, but live end-to-end verification (does a real signup through the
+running web app actually create a Supabase user + trigger the profiles
+row, does login actually set a working session cookie, does the profile
+page actually render real data) could NOT be performed from this sandbox —
+see "What Was Tested" below for exactly why and what was/wasn't checked.
+This needs to be verified once deployed (Vercel) or by the user running
+`npm run web:dev` somewhere with real network access to `*.supabase.co`.
 
 ## What Was Last Changed
-Applied Stage 2 database migrations, ran and fixed both Supabase advisor
-categories (security + performance), and manually verified RLS enforcement
-by switching to the `anon` Postgres role and testing real reads/writes
-against live tables (not just reading policy definitions).
+Built Stage 3's initial auth slice in apps/web and apps/api, discovered and
+documented a real sandbox limitation (no network path to *.supabase.co from
+this environment) that caps how much of it can be verified here.
 
 ## Latest Commit
-d6af673 (feat: Stage 2 database schema (categories, products, inventory)) — pushed to origin/main, CI green (run id 33646564205)
+(pending — will be updated after this session's commit is pushed)
 
 ## Current Branch
 main
@@ -64,6 +81,40 @@ main
   completely fresh venv matching CI conditions
 - GitHub Actions CI pipeline itself run and confirmed green (not just local
   command success) — run id 33598029310
+- STAGE 3 — what WAS verified locally:
+  - `npm run web:build` succeeds with the new auth pages/actions/proxy; the
+    build output explicitly lists a "ƒ Proxy (Middleware)" line, confirming
+    `proxy.ts` was actually picked up by Next.js 16, not silently ignored.
+  - `npm run web:lint` passes clean on the new code.
+  - Booted the real Next.js dev server and confirmed via curl: `/`, `/login`,
+    `/register` return 200; an unauthenticated request to `/profile` returns
+    a 307 redirect to `/login` (this doesn't require reaching Supabase — an
+    absent session cookie is a local decision, no JWKS lookup needed).
+  - `apps/api`: fresh-venv `pytest` run, 5/5 passing, including 4 new auth
+    tests (missing token → 401, garbage token → 401, expired token → 401,
+    valid token → 200 with correct claims echoed). The valid/expired cases
+    sign a real JWT with a locally generated RSA keypair and monkeypatch
+    the JWKS client — genuine JWT verification logic is exercised, just
+    against a test key instead of Supabase's real one.
+  - Booted the real FastAPI server (not just TestClient) and confirmed via
+    curl: `/health` returns 200, `/me` without a token and with a garbage
+    token both return 401.
+  - `ruff check .` passes clean.
+- STAGE 3 — what could NOT be verified from this sandbox, and why:
+  - A real end-to-end signup (`/register` → Supabase Auth → `profiles` row
+    created by the Stage 2 trigger) — this sandbox's network egress
+    allowlist does not include `*.supabase.co`. Directly tested this with
+    a Node script calling `supabase.auth.signUp()` against the real
+    project; it failed with "Host not in allowlist" from the egress proxy,
+    not a code error. The Supabase MCP tools use a different, permitted
+    channel, which is why Stage 2's database-level trigger test (inserting
+    directly into `auth.users` via SQL) worked but this app-level call
+    doesn't.
+  - Real login setting a working session cookie, and the profile page
+    rendering real Supabase-sourced data — blocked by the same network
+    restriction.
+  - The `/me` endpoint against a real Supabase-issued JWT (only tested
+    against a locally-signed test JWT, for the same reason).
 
 ## What Failed (and was fixed)
 - First two GitHub tokens (fine-grained PATs) could authenticate to the REST API but
@@ -83,12 +134,19 @@ main
     state). Fixed by adding `apps/api/pytest.ini` with `pythonpath = .`.
 
 ## Known Bugs
-None yet — no application code exists.
+None known, but see "What Was Tested" — the real signup/login/profile flow
+against live Supabase has not been exercised end-to-end from any
+environment yet (only unit-level and network-blocked-partial checks). This
+is a verification gap, not a known bug, but should be closed before
+Stage 3 is called fully done.
 
 ## What Must Happen Next
-See NEXT_TASK.md. Short version: scaffold apps/web (Next.js/TS/Tailwind), apps/api
-(FastAPI), root configs (.env.example, package.json workspaces, linting), and a
-minimal CI workflow. Then commit + push as the Stage 1 checkpoint.
+See NEXT_TASK.md. Short version: get real end-to-end verification of the
+Stage 3 auth flow (signup, login, profile page, /me) somewhere with actual
+network access to *.supabase.co — either by the user running the dev
+servers locally/on Vercel, or in a future session with different network
+permissions — then close out Stage 3 and move to Stage 4 (product catalog
+CRUD + admin UI, building on the Stage 2 schema).
 
 ## Migration / Deployment State
 - 6 database migrations applied and verified (see docs/DATABASE.md):
@@ -98,7 +156,9 @@ minimal CI workflow. Then commit + push as the Stage 1 checkpoint.
 - No Vercel project linked/deployed yet.
 - No Supabase Storage buckets created yet (needed once product image upload
   is built, Stage 4/25).
-- No real users/auth flow exists yet — Stage 3.
+- Auth code exists (Stage 3 initial slice) but has not been exercised
+  end-to-end against real Supabase Auth from any environment yet — see
+  "What Was Tested" above.
 
 ## Environment Variable Notes
 Supabase project credentials obtained this session (safe, publishable-only):
@@ -111,8 +171,9 @@ Supabase project credentials obtained this session (safe, publishable-only):
 - No payment provider secrets exist yet.
 
 ## Exact Next Recommended Action
-Begin STAGE 3 — AUTHENTICATION + RBAC: wire Supabase Auth into apps/web
-(sign up/log in/log out, session handling) and apps/api (verifying the
-Supabase JWT on protected endpoints), build protected route patterns, and
-decide/implement how `profiles.role` gates access to admin-only operations.
-See NEXT_TASK.md for the precise breakdown.
+Get real end-to-end verification of signup → login → /profile → /me
+against the live Supabase project, from an environment with actual network
+access (this sandbox's egress allowlist blocks *.supabase.co — see
+DECISIONS.md). Once verified, finish the rest of Stage 3 (password
+recovery, session refresh edge cases, first RBAC-gated action) per
+NEXT_TASK.md, then move to Stage 4.
