@@ -95,3 +95,35 @@ is why Stage 2's RLS verification worked but a live end-to-end signup test
 through the running Next.js dev server does not work from inside this
 sandbox. See DEVELOPMENT_LOG.md for what was and wasn't verified as a
 result, and NEXT_TASK.md for what still needs manual/deployed verification.
+
+## 2026-09-03 — apps/api uses raw httpx against PostgREST, not the supabase-py SDK
+For the small number of backend operations needed so far (a couple of
+reads, one write, one role lookup), a thin `httpx.Client` wrapper
+(`app/core/supabase_client.py`) against Supabase's auto-generated
+PostgREST API is simpler to reason about, simpler to unit test (via
+`httpx.MockTransport`, no real network or extra test dependency needed),
+and has no hidden SDK behavior to account for. Revisit if/when the backend
+needs realtime subscriptions, storage uploads, or other features the raw
+REST API doesn't cover well — that's when `supabase-py` earns its
+complexity.
+
+## 2026-09-03 — Product writes always go through service_client(), reads through anon_client()
+Mirrors the RLS design from Stage 2: `products`/`categories` have no
+client-writable RLS policy on purpose (see docs/DATABASE.md), so the only
+way to write from the backend is the service-role key, which bypasses RLS
+entirely. This makes `app.auth.rbac.require_role(...)` the *only* gate on
+writes — there's no RLS safety net on the write path the way there is on
+reads. Verified this is intentional and documented so a future session
+doesn't "fix" it by loosening RLS instead.
+
+## 2026-09-03 — Bug found via real server testing, not just unit tests: unhandled network errors leaked as 500
+Unit tests alone (which mock the network boundary) didn't catch this: the
+first version of `app/products/router.py` only caught
+`httpx.HTTPStatusError` (a PostgREST error response), not
+`httpx.HTTPError`/connection failures. Booting the real server and hitting
+`/products` for real (in this sandbox, where the request genuinely can't
+reach Supabase) surfaced a raw unhandled 500. Widened the except clauses
+in both `app/products/router.py` and `app/auth/rbac.py`'s profile lookup
+to catch `httpx.HTTPError` broadly, returning a structured 502/503 instead.
+Lesson reinforced: booting the real process and hitting it, not just
+running the mocked test suite, is what caught this — keep doing both.

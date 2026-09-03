@@ -3,15 +3,20 @@
 Last updated: 2026-09-03 (session 1, continued)
 
 ## Current Stage
-STAGE 3 — AUTHENTICATION + RBAC (initial slice complete; partially verified —
-see caveats below)
+STAGE 4 — PRODUCT CATALOG (in progress). apps/api has the RBAC pattern and
+a first read/write endpoint pair (GET/POST /products) built and tested.
+apps/web catalog pages (browse/search/filter, admin product management UI)
+not started yet. Stage 3 remaining items (full login round-trip re-check,
+password recovery, session refresh check) still open by explicit user
+decision — not forgotten, see prior entries.
 
 ## Current Milestone
-Supabase Auth wired into apps/web (register/login/profile pages, Server
-Actions, proxy.ts session refresh) and a JWT-verification dependency wired
-into apps/api (/me endpoint). Code-level and unit-test verification done;
-live end-to-end network verification NOT possible from this sandbox (see
-"What Was Tested" and DECISIONS.md).
+Core auth flow (signup, session creation, logout+redirect) confirmed
+working by the user running the app locally with real network access to
+Supabase — closing the verification gap this sandbox couldn't close itself.
+Moving to STAGE 4 — Product Catalog, which will include the RBAC-gated
+admin-write pattern originally scoped as a separate Stage 3 task (more
+useful to build it against a real endpoint than a throwaway example).
 
 ## What Is Complete
 - GitHub repo verified: https://github.com/raf-leul/TELECOMERCE (push access confirmed,
@@ -49,16 +54,30 @@ live end-to-end network verification NOT possible from this sandbox (see
   the valid/expired cases sign real JWTs with a locally generated RSA
   keypair and monkeypatch the JWKS client, so no network access to
   Supabase is needed for these tests to be meaningful).
+- STAGE 4 (started): `apps/api` products module —
+  `app/core/supabase_client.py` (httpx wrapper for Supabase's PostgREST
+  API: `anon_client()` for RLS-respecting reads, `service_client()` for
+  admin writes), `app/auth/rbac.py` (`require_role(...)` FastAPI
+  dependency looking up `profiles.role` via the service-role client),
+  `app/products/router.py` (`GET /products` public/RLS-gated,
+  `POST /products` admin-only via RBAC). 13/13 tests passing (up from 5),
+  all via `httpx.MockTransport` — no real Supabase network access needed
+  or used for these tests. Booting the real server surfaced and fixed a
+  real bug: network/connection failures weren't caught by the original
+  `except httpx.HTTPStatusError`, so they leaked as raw 500s; widened to
+  `httpx.HTTPError` and now returns a clean structured 502/503.
 
 ## What Is Partially Complete
-Stage 3's initial slice is code-complete and locally verified where
-possible, but live end-to-end verification (does a real signup through the
-running web app actually create a Supabase user + trigger the profiles
-row, does login actually set a working session cookie, does the profile
-page actually render real data) could NOT be performed from this sandbox —
-see "What Was Tested" below for exactly why and what was/wasn't checked.
-This needs to be verified once deployed (Vercel) or by the user running
-`npm run web:dev` somewhere with real network access to `*.supabase.co`.
+Stage 3's initial slice was verified for real by the user on their own
+machine (with actual network access to Supabase, which this sandbox
+lacks): signup created a real `auth.users` row + a correctly-populated
+`profiles` row (display_name "raf", role "customer", correct created_at),
+the profile page rendered that real data, and logout correctly redirected
+to `/login`. NOT verified: the full login round-trip with an existing
+account (user moved on before doing this check), password recovery,
+session-refresh past token expiry, and an RBAC-gated example — these
+remain open per the user's explicit decision to proceed to Stage 4 anyway.
+Revisit before considering Stage 3 fully closed.
 
 ## What Was Last Changed
 Built Stage 3's initial auth slice in apps/web and apps/api, discovered and
@@ -115,6 +134,23 @@ main
     restriction.
   - The `/me` endpoint against a real Supabase-issued JWT (only tested
     against a locally-signed test JWT, for the same reason).
+- STAGE 3 — resolved by the USER running the app locally (real network
+  access to Supabase, unlike this sandbox), 2026-09-03:
+  - ✅ `/register` with real credentials created a real account; the
+    Stage 2 auto-provisioning trigger fired correctly — `/profile` showed
+    the correct `display_name` ("raf"), `role` ("customer"), and a real
+    join date.
+  - ✅ Confirmed Supabase's default email-confirmation setting for this
+    project does NOT block the initial session — signup logs the user in
+    immediately even before the confirmation email is clicked. Worth
+    knowing: this is a project-level Supabase Auth setting, not something
+    this codebase enforces either way.
+  - ✅ Logout correctly cleared the session and redirected to `/login`.
+  - ⚠️ NOT explicitly re-confirmed: logging back in with the same
+    credentials on `/login` after logout (the user moved on to Stage 4
+    before completing this specific check). Worth a quick manual check
+    later if a login-specific bug ever surfaces, but not blocking further
+    work given everything else in the loop verified correctly.
 
 ## What Failed (and was fixed)
 - First two GitHub tokens (fine-grained PATs) could authenticate to the REST API but

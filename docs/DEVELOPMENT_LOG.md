@@ -188,3 +188,74 @@ list; docs updated: `docs/DECISIONS.md` (4 new entries), `docs/PROJECT_STATE.md`
 slice from a network-capable environment, then finish the rest of Stage 3
 (password recovery, session refresh check, one RBAC-gated example) before
 moving to Stage 4.
+
+## Session 1 (continued) — Stage 3 real-world verification + Stage 4 start
+
+**Stage 3 real-world verification (by the user, not this sandbox):**
+User ran `apps/web` locally with real network access to Supabase and
+confirmed: signup created a real account (`raf`, role `customer`, correct
+join date) and a matching `profiles` row, the profile page rendered that
+real data, and logout redirected to `/login` correctly. This closes the
+verification gap the sandbox couldn't close itself for the core signup
+flow. NOT re-verified: full login round-trip with an existing account,
+password recovery, session refresh, RBAC-gated example — user explicitly
+chose to move to Stage 4 rather than complete these first; carried forward
+in NEXT_TASK.md rather than dropped.
+
+**Stage 4 — Product Catalog (started):**
+Built on top of in-progress work already on disk from earlier in the
+session (`app/core/supabase_client.py`, `app/auth/rbac.py` — a thin httpx
+wrapper for Supabase's PostgREST API and a `require_role(...)` RBAC
+dependency built on the Stage 3 JWT verification + Stage 2's `profiles.role`
+enum). Added `app/products/router.py` (`GET /products` public,
+`POST /products` admin-only) and wired it into `main.py`.
+
+**Testing process and what it caught:**
+- Wrote `tests/test_products.py` using `httpx.MockTransport` to intercept
+  PostgREST calls without any real network access — appropriate given the
+  sandbox's confirmed inability to reach `*.supabase.co`.
+- Hit three real bugs while getting these tests to actually pass (not
+  glossed over):
+  1. Fake test clients lacked a `base_url`, causing relative-path requests
+     to fail with a URL-parsing error — a test setup bug, fixed by giving
+     fakes the same `base_url` shape as the real `anon_client()`/
+     `service_client()`.
+  2. FastAPI's `dependency_overrides` need the override to match the
+     original dependency's generator-function shape; a plain
+     `lambda: iter([...])` was silently wrong (returned an iterator object
+     as the "client" instead of yielding the actual client) — fixed by
+     using real generator functions for the overrides.
+  3. **A genuine application bug**, not a test bug: caught by booting the
+     real server and hitting `/products` for real (in this sandbox, where
+     it can't reach Supabase) — the error handling only caught
+     `httpx.HTTPStatusError`, so a connection failure bubbled up as an
+     unhandled, unstructured 500. Widened to `httpx.HTTPError` in both
+     `app/products/router.py` and `app/auth/rbac.py`'s role lookup; now
+     returns a clean structured 502/503 instead. This is exactly the kind
+     of bug that mocked unit tests alone don't catch, which is why both
+     the test suite AND a real server boot-and-curl check were done, not
+     just one.
+- Added `tests/test_supabase_client.py` to directly test the
+  header-setting logic (`anon_client()`/`service_client()`) that the
+  products tests deliberately bypass by overriding the FastAPI dependency.
+- Final state: 13/13 tests passing (was 5 before this session), `ruff
+  check .` clean, `apps/web` build/lint unaffected and still clean.
+
+**Files changed:** `apps/api/app/core/supabase_client.py`,
+`apps/api/app/auth/rbac.py`, `apps/api/app/products/` (new),
+`apps/api/app/main.py`, `apps/api/tests/test_products.py` (new),
+`apps/api/tests/test_supabase_client.py` (new), `docs/DECISIONS.md` (3 new
+entries), `docs/PROJECT_STATE.md`, `docs/NEXT_TASK.md`.
+
+**Not yet done / explicitly not claimed:**
+- No categories endpoints yet, no single-product-by-slug endpoint.
+- No apps/web storefront pages (`/shop`, `/products/[slug]`) yet — apps/web
+  still only has the auth pages from Stage 3.
+- The new `/products` endpoints have not been exercised against real
+  Supabase data from any environment yet (same network caveat as Stage 3).
+- No admin UI — admin-only endpoints are proven via RBAC unit tests only,
+  not a real admin JWT request yet (would need the network-access
+  environment to test that end-to-end too).
+
+**Next task:** see NEXT_TASK.md — categories endpoints, single-product
+endpoint, and the first storefront browsing pages.

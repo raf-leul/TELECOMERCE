@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     # the service-role key in this file's defaults).
     supabase_url: str = ""
     supabase_anon_key: str = ""
+    # Backend-only, never sent to the client. Used to bypass RLS for
+    # legitimate backend operations: admin writes to catalog tables (no
+    # client-writable INSERT/UPDATE policy exists on purpose, per
+    # docs/DATABASE.md) and reading another user's profiles.role for
+    # authorization decisions (RLS only lets a user read their own row).
+    supabase_service_role_key: str = ""
 
     # CORS
     cors_allow_origins: list[str] = ["http://localhost:3000"]

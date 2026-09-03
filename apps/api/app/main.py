@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.security import VerifiedUser, get_current_user
 from app.core.config import settings
+from app.products.router import router as products_router
 
 app = FastAPI(title=settings.app_name)
 
@@ -21,6 +22,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(products_router)
 
 
 @app.get("/health")
