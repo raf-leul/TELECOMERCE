@@ -66,7 +66,7 @@ documented a real sandbox limitation (no network path to *.supabase.co from
 this environment) that caps how much of it can be verified here.
 
 ## Latest Commit
-(pending — will be updated after this session's commit is pushed)
+bbc110f (feat: Stage 3 initial auth slice (web sign-up/login/profile, api JWT verification)) — pushed to origin/main, CI green (run id 33741924864)
 
 ## Current Branch
 main
