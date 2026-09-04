@@ -48,6 +48,11 @@ export default function LoginPage() {
         </button>
       </form>
       <p className="mt-4 text-sm text-zinc-600">
+        <Link href="/forgot-password" className="underline">
+          Forgot your password?
+        </Link>
+      </p>
+      <p className="mt-2 text-sm text-zinc-600">
         Need an account?{" "}
         <Link href="/register" className="underline">
           Register

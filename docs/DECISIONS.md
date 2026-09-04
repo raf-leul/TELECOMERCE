@@ -127,3 +127,21 @@ in both `app/products/router.py` and `app/auth/rbac.py`'s profile lookup
 to catch `httpx.HTTPError` broadly, returning a structured 502/503 instead.
 Lesson reinforced: booting the real process and hitting it, not just
 running the mocked test suite, is what caught this — keep doing both.
+
+## 2026-09-03 — Password recovery: token_hash + verifyOtp, not URL-fragment parsing
+Checked current Supabase docs/community guidance before implementing
+(Rule 10). The older pattern has the client parse `access_token` out of a
+URL fragment after the reset-email link redirect; the currently
+recommended pattern instead sends a `token_hash` + `type=recovery` query
+param to a server-side confirm route
+(`app/auth/confirm/route.ts`), which calls `supabase.auth.verifyOtp()`
+server-side to establish the session, then redirects to `/reset-password`.
+This route handler is reused for future email-confirmation links too
+(signup confirmation already emails a similar link), avoiding a second
+near-duplicate handler later.
+
+## 2026-09-03 — /forgot-password never reveals whether an email is registered
+`requestPasswordReset` returns the same "if an account exists..." message
+regardless of whether `resetPasswordForEmail` actually found a matching
+user (Supabase's own API doesn't leak this either). Prevents using the
+password-reset form as a way to enumerate registered email addresses.

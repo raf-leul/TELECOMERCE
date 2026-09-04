@@ -47,10 +47,21 @@ reach Supabase:
 - Pushed to origin/main, CI confirmed green
 - PROJECT_STATE.md and this file updated afterward
 
-## Still open from Stage 3 (not forgotten, deliberately deferred)
-- Full login round-trip re-verification with an existing account
-- Password recovery flow
-- Session refresh past token expiry
+## Still open from Stage 3 (mostly closed now, one item remains)
+- Password recovery flow: BUILT and locally verified this session
+  (routes render, error states correct). NOT yet tested with a real email
+  click — do this from an environment with real email access: request a
+  reset on `/forgot-password`, click the real email link, confirm it lands
+  on `/reset-password` with a working session, set a new password, log in
+  with it.
+- Session refresh: code-verified (matches Supabase's current docs, proven
+  wired into every request via the proxy build output) but not
+  time-verified — nothing to build here, just something to notice if a
+  long-lived session ever silently breaks.
+- Full login round-trip re-verification with an existing account: still
+  not explicitly re-checked (the Stage 3 test session moved on after
+  signup+profile+logout). Low priority — the underlying code hasn't
+  changed since that partial verification.
 
 ## After this task
 Stage 5 — Cart: server-side cart API (add/remove/update quantity),

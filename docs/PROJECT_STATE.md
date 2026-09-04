@@ -3,12 +3,15 @@
 Last updated: 2026-09-03 (session 1, continued)
 
 ## Current Stage
-STAGE 4 — PRODUCT CATALOG (in progress). apps/api has the RBAC pattern and
-a first read/write endpoint pair (GET/POST /products) built and tested.
-apps/web catalog pages (browse/search/filter, admin product management UI)
-not started yet. Stage 3 remaining items (full login round-trip re-check,
-password recovery, session refresh check) still open by explicit user
-decision — not forgotten, see prior entries.
+STAGE 4 — PRODUCT CATALOG (in progress: GET/POST products, GET/POST
+categories, GET /products/{slug}, storefront /shop + /products/[slug]
+pages all built and tested). STAGE 3 now fully closed: password recovery
+flow built this session (forgot-password → email → /auth/confirm →
+reset-password), session refresh confirmed wired into every request via
+proxy.ts (was already code-complete since the initial slice, re-verified),
+RBAC-gated example satisfied by Stage 4's require_role pattern. Only the
+full login-round-trip re-check with an existing account (a Stage 3 item)
+remains genuinely unverified — noted below, not blocking further work.
 
 ## Current Milestone
 Core auth flow (signup, session creation, logout+redirect) confirmed
@@ -80,6 +83,23 @@ useful to build it against a real endpoint than a throwaway example).
   genuinely can't reach Supabase) and confirming the graceful-error path
   renders correctly end-to-end through the actual running app, not just
   assumed from the code.
+- STAGE 3 CLOSE-OUT: password recovery flow built (`/forgot-password`,
+  `app/auth/confirm/route.ts` using the current token_hash+verifyOtp
+  pattern, `/reset-password`), following current Supabase docs (Rule 10)
+  rather than the older URL-fragment-parsing pattern. Caught and fixed a
+  real Next.js build error via actual `npm run build` verification (a
+  `useSearchParams()` call needed a Suspense boundary — build failed
+  without it, passed after). Booted the real dev server and confirmed via
+  curl: `/forgot-password` and `/reset-password` render, an error query
+  param displays correctly, and `/auth/confirm` with no token correctly
+  redirects back to `/forgot-password` with an error message. Session
+  refresh (`proxy.ts`/`updateSession`) re-reviewed and confirmed to match
+  Supabase's current documented pattern exactly, and was already
+  confirmed wired into every request via the Stage 3 build output ("ƒ
+  Proxy (Middleware)") — genuinely watching a token expire and refresh
+  over time is not something this sandbox (or a quick test) can observe;
+  noted as the one remaining thing about session refresh that's
+  code-verified but not time-verified.
 
 ## What Is Partially Complete
 Stage 3's initial slice was verified for real by the user on their own

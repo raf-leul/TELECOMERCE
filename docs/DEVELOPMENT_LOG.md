@@ -314,3 +314,61 @@ the first thing to check from a network-capable environment.
 
 **Next task:** see NEXT_TASK.md — real-data verification, then
 PATCH/DELETE for products/categories, then Stage 5 (cart).
+
+## Session 1 (continued) — Closing out Stage 3: password recovery
+
+**What I did:**
+User asked whether Stage 3 was finished; it wasn't (password recovery and
+session-refresh verification were still open, though the RBAC item got
+satisfied incidentally by Stage 4's `require_role` pattern). Finished it:
+
+- Checked current Supabase community/docs guidance before writing code
+  (Rule 10) — confirmed the currently recommended password-reset pattern
+  uses a `token_hash` + `type=recovery` query param handled by a
+  server-side confirm route calling `supabase.auth.verifyOtp()`, not the
+  older client-side URL-fragment-parsing approach.
+- Added `requestPasswordReset` and `updatePassword` Server Actions to
+  `app/auth/actions.ts`.
+- Added `app/auth/confirm/route.ts` — a reusable route handler for both
+  password-recovery and (future) signup-confirmation links.
+- Added `/forgot-password` and `/reset-password` pages, and a link to
+  `/forgot-password` from `/login` (a real usability fix, not scope creep
+  — the login page had no way to reach it otherwise).
+
+**A real bug caught by actually running the build, not just writing
+code:** `npm run web:build` failed with
+`useSearchParams() should be wrapped in a suspense boundary` on
+`/forgot-password`. Fixed by extracting the search-param-reading bit into
+a small component wrapped in `<Suspense>`. Rebuilt and confirmed the fix
+worked before moving on.
+
+**Verification performed:**
+- `npm run web:build` and `npm run web:lint` both clean afterward.
+- Booted the real dev server and curl-tested: `/forgot-password` (200),
+  the error-message query param actually rendering the right text,
+  `/reset-password` (200), and `/auth/confirm` with no token correctly
+  307-redirecting to `/forgot-password?error=...`.
+- Re-reviewed `lib/supabase/proxy.ts` against current Supabase docs — it
+  already matched the recommended pattern from the Stage 3 initial slice.
+  Session refresh is code-verified (proven wired into every request via
+  the "ƒ Proxy (Middleware)" build output back in Stage 3) but not
+  time-verified — actually observing a token expire and refresh requires
+  a long-lived real session, which is a "run it and wait" check better
+  done by the user than manufactured in a quick test.
+
+**Still not verified (same recurring, honest limitation):** the actual
+email delivery + link-click flow with a real inbox — this sandbox can't
+send/receive real email or reach Supabase. If the user wants to fully
+close this out, the test is: request a reset on `/forgot-password`, click
+the link in the real email, confirm it lands on `/reset-password` with
+a valid session, set a new password, and log in with it.
+
+**Files changed:** `apps/web/app/auth/actions.ts`,
+`apps/web/app/auth/confirm/route.ts` (new),
+`apps/web/app/forgot-password/page.tsx` (new),
+`apps/web/app/reset-password/page.tsx` (new),
+`apps/web/app/login/page.tsx` (added a link), `docs/DECISIONS.md` (2 new
+entries), `docs/PROJECT_STATE.md`.
+
+**Stage 3 status:** now considered closed, modulo the always-honest caveat
+that a real end-to-end email-click test hasn't been run by anyone yet.
