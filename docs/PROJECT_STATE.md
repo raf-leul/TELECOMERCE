@@ -99,7 +99,7 @@ documented a real sandbox limitation (no network path to *.supabase.co from
 this environment) that caps how much of it can be verified here.
 
 ## Latest Commit
-bbc110f (feat: Stage 3 initial auth slice (web sign-up/login/profile, api JWT verification)) — pushed to origin/main, CI green (run id 33741924864)
+40b70c2 (feat: Stage 4 continued — categories API, product slug lookup, storefront pages) — pushed to origin/main, CI green (run id 33841785550)
 
 ## Current Branch
 main
