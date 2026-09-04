@@ -259,3 +259,58 @@ entries), `docs/PROJECT_STATE.md`, `docs/NEXT_TASK.md`.
 
 **Next task:** see NEXT_TASK.md — categories endpoints, single-product
 endpoint, and the first storefront browsing pages.
+
+## Session 1 (continued) — Stage 4: categories, product slug lookup, storefront pages
+
+**What I did:**
+Continued Stage 4 on top of in-progress work already on disk (a shared
+`app/core/postgrest_deps.py` refactor, `app/categories/` module — inspected
+before touching per Rule 1, confirmed sound, then finished wiring it in).
+
+- Wired `categories_router` into `main.py` (it existed but wasn't included
+  yet).
+- Confirmed the existing refactor didn't break anything: full test suite
+  still 13/13 after wiring, before adding new tests.
+- Added `tests/test_categories.py` (list/create/RBAC-denied/RBAC-allowed —
+  same pattern as products) and two tests for the pre-existing but
+  untested `GET /products/{slug}` endpoint (found + not-found).
+- Built `apps/web/lib/api/client.ts` (typed fetch helpers) and two new
+  pages: `/shop` (product listing) and `/products/[slug]` (detail), both
+  calling `apps/api` rather than Supabase directly, matching the "shared
+  backend across channels" architecture principle so the eventual
+  Telegram bot doesn't duplicate this logic.
+- Added `NEXT_PUBLIC_API_URL` to `.env.example`.
+
+**Verification performed:**
+- Fresh-venv `pytest`: 19/19 passing (up from 13). `ruff check .` clean.
+- `npm run web:build`: succeeds, `/shop` and `/products/[slug]` correctly
+  render as dynamic routes (not statically pre-rendered, since they need
+  live data). `npm run web:lint` clean.
+- Booted the real FastAPI server and confirmed via curl: all 5 routes
+  present in `/openapi.json`, `/categories` and `/products/{slug}` both
+  return a clean structured 502 (not a raw crash) when Supabase is
+  unreachable — same fix pattern as the earlier products bug, applied
+  consistently.
+- Booted BOTH the real FastAPI server and the real Next.js dev server
+  together and hit `/shop` and `/products/nonexistent-slug` through the
+  actual running web app: confirmed the graceful "couldn't load" error
+  message renders correctly end-to-end (apps/web successfully talked to
+  apps/api, and apps/api's own graceful-failure design showed through
+  correctly), rather than the page crashing. This is stronger evidence
+  than testing either app in isolation.
+
+**What's still NOT verified (same recurring, honestly-documented
+limitation):** the actual "happy path" — real products/categories seeded
+in Supabase, actually appearing correctly on `/shop`/`/products/[slug]`,
+and a real admin JWT actually succeeding against `POST /products` — none
+of this can be exercised from this sandbox. Written into NEXT_TASK.md as
+the first thing to check from a network-capable environment.
+
+**Files changed:** `apps/api/app/main.py`, `apps/api/tests/test_categories.py`
+(new), `apps/api/tests/test_products.py` (2 new tests appended),
+`apps/web/lib/api/client.ts` (new), `apps/web/app/shop/page.tsx` (new),
+`apps/web/app/products/[slug]/page.tsx` (new), `.env.example`,
+`docs/PROJECT_STATE.md`, `docs/NEXT_TASK.md`.
+
+**Next task:** see NEXT_TASK.md — real-data verification, then
+PATCH/DELETE for products/categories, then Stage 5 (cart).

@@ -2,56 +2,58 @@
 
 ## Immediate next task (single executable unit)
 
-STAGE 4 — continue Product Catalog: categories endpoints + apps/web
-storefront browsing.
+STAGE 4 — real end-to-end verification with seeded data, then admin CRUD
+completeness (edit/delete), then move toward Stage 5 (cart).
 
-apps/api already has the RBAC pattern proven (GET/POST /products). Extend
-it and connect it to the frontend:
+The catalog read path (`GET /products`, `GET /products/{slug}`,
+`GET /categories`) and the admin write path (`POST /products`,
+`POST /categories`, both RBAC-gated) are built and unit-tested (19/19
+tests), and `apps/web`'s `/shop` + `/products/[slug]` pages correctly call
+`apps/api` and degrade gracefully when it's unreachable — all confirmed by
+booting the real servers, not just from the test suite. What's still
+unverified is the "happy path" with real data, since this sandbox can't
+reach Supabase:
 
-1. `apps/api`: add `app/categories/` mirroring the products module —
-   `GET /categories` (public), `POST /categories` (admin-only via
-   `require_role`). Add `GET /products/{slug}` (public, single product by
-   slug — 404 if not found or inactive, relying on RLS the same way the
-   list endpoint does). Tests for all three, same pattern as
-   `tests/test_products.py` (httpx.MockTransport, no real network).
-2. `apps/web`: build a storefront product listing page (`/shop` or similar)
-   that fetches from `apps/api`'s `GET /products` (not directly from
-   Supabase — apps/web should go through the shared backend per
-   docs/ARCHITECTURE.md's "one source of truth" principle, even for public
-   reads, so business logic doesn't fork between channels later). A
-   product detail page at `/products/[slug]`.
-3. Real end-to-end check once this is testable somewhere with network
-   access to Supabase (see the recurring caveat in DECISIONS.md): seed one
-   or two real products via `execute_sql`/`apply_migration` (or build a
-   minimal seed script), confirm they render on `/shop` and
-   `/products/[slug]`, and confirm an inactive product does NOT appear.
-4. Do NOT build the full admin dashboard UI yet (Stage 9) — just prove the
-   admin-only POST endpoints work by testing them directly (curl/Postman
-   with a real admin JWT) rather than building UI for them this stage.
+1. From an environment with real network access to Supabase (user's
+   machine, or a future session with different permissions): seed 2-3 real
+   products and a category via Supabase (`execute_sql` or the dashboard),
+   run both `apps/api` (`uvicorn app.main:app`) and `apps/web`
+   (`npm run web:dev`), and confirm:
+   - `/shop` lists the seeded active products (and does NOT list an
+     inactive one, if you seed one to check)
+   - `/products/<real-slug>` shows the correct name/price/description
+   - `/products/<a-slug-that-does-not-exist>` shows Next.js's actual 404
+     page (not the "couldn't load" error message — those are two visually
+     different states, confirm the right one appears)
+   - `POST /products` with a real admin JWT (get one via `/me` after
+     logging in as a user whose `profiles.role` you've manually set to
+     `admin` via SQL) succeeds; the same request with a non-admin JWT
+     returns 403
+2. Once verified, add PATCH/DELETE for both products and categories
+   (admin-only, same RBAC pattern), with the same rigor: unit tests +
+   real-server boot check + (when possible) real Supabase verification.
+3. Do NOT build search/filter/pagination on `/shop` yet, and do NOT build
+   image upload yet — both explicitly scoped for later in Stage 4 per
+   master instructions section 21/25. Keep this task focused on CRUD
+   completeness.
 
 ## Definition of done for this task
-- Categories endpoints built and tested the same rigorous way as products
-  (unit tests + a real server boot-and-curl check, since that's what
-  caught the Stage 4 network-error bug already found this session)
-- `GET /products/{slug}` built and tested (found + not-found + inactive
-  cases)
-- `/shop` and `/products/[slug]` pages built in apps/web, fetching from
-  apps/api
-- Real seed data used to verify the storefront pages actually render
-  correctly once network access allows it — or explicitly documented as
-  not yet verified, same honesty standard as Stage 3
-- Commit message: `feat: Stage 4 continued — categories API, storefront browsing pages`
-- Pushed to origin/main, CI confirmed green (not just locally)
+- Real-data verification performed and documented (screenshots, curl
+  output, or described exactly what was seen) — or explicitly marked as
+  still-unverified with the same honesty standard used in Stages 2-4 so
+  far, if no network-capable environment was available this session
+- PATCH/DELETE added for products and categories, admin-gated, tested
+- Commit message: `feat: Stage 4 CRUD completeness (update/delete) + real-data verification`
+- Pushed to origin/main, CI confirmed green
 - PROJECT_STATE.md and this file updated afterward
 
 ## Still open from Stage 3 (not forgotten, deliberately deferred)
 - Full login round-trip re-verification with an existing account
 - Password recovery flow
 - Session refresh past token expiry
-These can be picked up whenever convenient — they don't block Stage 4 but
-should be closed before calling the project's auth "done."
 
 ## After this task
-Continue Stage 4: admin product/category CRUD (edit/delete, not just
-create), inventory visibility on the storefront, image upload via Supabase
-Storage (new bucket + RLS policies), search/filter/pagination on `/shop`.
+Stage 5 — Cart: server-side cart API (add/remove/update quantity),
+server-side pricing (never trust client price/quantity totals — see
+docs/DATABASE.md's price_cents design and master instructions section 27),
+guest + authenticated cart with merge-on-login logic.

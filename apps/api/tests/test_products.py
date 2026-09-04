@@ -221,3 +221,64 @@ def test_create_product_succeeds_for_admin(_patch_jwks, rsa_keypair):
         app.dependency_overrides.clear()
         fake_role_lookup_client.close()
         fake_write_client.close()
+
+
+def test_get_product_by_slug_found():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/rest/v1/products"
+        assert request.url.params["slug"] == "eq.test-widget"
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "p3",
+                    "name": "Test Widget",
+                    "slug": "test-widget",
+                    "description": "desc",
+                    "price_cents": 1000,
+                    "is_active": True,
+                    "category_id": None,
+                }
+            ],
+        )
+
+    fake_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(handler),
+    )
+
+    def _fake_anon_client():
+        yield fake_client
+
+    app.dependency_overrides[products_router.get_anon_client] = _fake_anon_client
+    try:
+        response = TestClient(app).get("/products/test-widget")
+        assert response.status_code == 200
+        assert response.json()["name"] == "Test Widget"
+    finally:
+        app.dependency_overrides.clear()
+        fake_client.close()
+
+
+def test_get_product_by_slug_not_found_returns_404():
+    # Same response PostgREST gives whether the slug truly doesn't exist or
+    # exists but is inactive and RLS already filtered it out — see the
+    # comment in app/products/router.py for why that's intentional.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[])
+
+    fake_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(handler),
+    )
+
+    def _fake_anon_client():
+        yield fake_client
+
+    app.dependency_overrides[products_router.get_anon_client] = _fake_anon_client
+    try:
+        response = TestClient(app).get("/products/does-not-exist")
+        assert response.status_code == 404
+    finally:
+        app.dependency_overrides.clear()
+        fake_client.close()

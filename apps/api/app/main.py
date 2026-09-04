@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.auth.security import VerifiedUser, get_current_user
+from app.categories.router import router as categories_router
 from app.core.config import settings
 from app.products.router import router as products_router
 
@@ -24,6 +25,7 @@ app.add_middleware(
 )
 
 app.include_router(products_router)
+app.include_router(categories_router)
 
 
 @app.get("/health")

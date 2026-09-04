@@ -66,6 +66,20 @@ useful to build it against a real endpoint than a throwaway example).
   real bug: network/connection failures weren't caught by the original
   `except httpx.HTTPStatusError`, so they leaked as raw 500s; widened to
   `httpx.HTTPError` and now returns a clean structured 502/503.
+- STAGE 4 continued: `app/categories/router.py` (`GET /categories` public,
+  `POST /categories` admin-only, same RLS+RBAC pattern as products) built
+  on shared plumbing pulled out to `app/core/postgrest_deps.py`.
+  `GET /products/{slug}` added (404 for missing/inactive, same response
+  either way so drafts aren't distinguishable from nonexistent slugs).
+  19/19 tests passing (up from 13). `apps/web`: `/shop` (product listing)
+  and `/products/[slug]` (detail) pages added, calling `apps/api` — not
+  Supabase directly — via `lib/api/client.ts`, per the "one backend, many
+  channels" architecture principle. Both pages degrade gracefully (visible
+  error message, not a crash) when the API is unreachable — verified for
+  real by booting both servers together in this sandbox (where the API
+  genuinely can't reach Supabase) and confirming the graceful-error path
+  renders correctly end-to-end through the actual running app, not just
+  assumed from the code.
 
 ## What Is Partially Complete
 Stage 3's initial slice was verified for real by the user on their own
