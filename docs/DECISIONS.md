@@ -193,3 +193,30 @@ individually — now returns a clean structured 503. This is the same
 earlier `httpx.HTTPStatusError` vs `httpx.HTTPError` bug in Stage 4;
 recorded here so it's clear this is a recurring, effective verification
 step, not a one-off.
+
+## 2026-09-05 — Found and fixed: 0007_cart.sql migration was applied to Supabase but never saved to the repo
+Before continuing Stage 5, inspected the actual repo state (Rule 1) and
+found `apps/api/app/cart/` code and 36 passing tests already existed
+locally, but `supabase/migrations/0007_cart.sql` did not — despite
+`docs/PROJECT_STATE.md` and `docs/DEVELOPMENT_LOG.md` both stating it had
+been "applied," and `list_migrations` confirming the migration really was
+applied to the live Supabase project (version `20260905043923`). The
+`.sql` file itself was simply never written to disk/committed in the
+session that applied it.
+
+Recreated the file from the actual live schema (introspected via
+`pg_constraint`/`pg_indexes`, not guessed) rather than reconstructing it
+from memory of what the migration probably contained — this caught a real
+naming discrepancy: the live schema uses a plain `UNIQUE (guest_token)`
+column constraint and an index named `idx_carts_user_id_unique` (not the
+`idx_carts_unique_user`/`idx_carts_unique_guest_token` names an
+independent reconstruction first guessed). The corrected file now matches
+the live database exactly, verified by testing the constraints directly
+against Supabase (rejected null/null and non-null/non-null owner
+combinations, rejected duplicate user_id, rejected quantity=0 — then
+cleaned up all test data afterward).
+
+Lesson: "migration applied" and "migration file exists in git" are two
+separate facts that must both be checked — a green CI run and passing
+tests don't catch a missing schema file when the database itself already
+has the schema from a prior direct application.

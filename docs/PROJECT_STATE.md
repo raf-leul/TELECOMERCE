@@ -1,6 +1,6 @@
 # PROJECT_STATE.md
 
-Last updated: 2026-09-03 (session 1, continued)
+Last updated: 2026-09-05 (session 1, continued)
 
 ## Current Stage
 STAGE 5 — CART (built: schema + API, 36/36 tests passing; real-data
@@ -133,16 +133,16 @@ useful to build it against a real endpoint than a throwaway example).
   502) behave correctly on the real running server.
 
 ## What Is Partially Complete
-Stage 3's initial slice was verified for real by the user on their own
-machine (with actual network access to Supabase, which this sandbox
-lacks): signup created a real `auth.users` row + a correctly-populated
-`profiles` row (display_name "raf", role "customer", correct created_at),
-the profile page rendered that real data, and logout correctly redirected
-to `/login`. NOT verified: the full login round-trip with an existing
-account (user moved on before doing this check), password recovery,
-session-refresh past token expiry, and an RBAC-gated example — these
-remain open per the user's explicit decision to proceed to Stage 4 anyway.
-Revisit before considering Stage 3 fully closed.
+Stage 5's cart migration file was recreated this session after being
+discovered missing from the repo (see DECISIONS.md) — now verified to
+exactly match the live, already-applied schema, including direct testing
+of every constraint (owner-exclusivity, per-user/per-guest-token
+uniqueness, quantity>0) against the real Supabase project, with all test
+data cleaned up afterward. Cart's real end-to-end path (actually adding a
+real product to a real cart through the running API) has NOT been
+exercised from any environment yet — same recurring network limitation as
+every other stage, deferred to NEXT_TASK.md. Everything else (Stages 1-4,
+Stage 3's password recovery) is fully closed per the entries above.
 
 ## What Was Last Changed
 Built Stage 3's initial auth slice in apps/web and apps/api, discovered and
