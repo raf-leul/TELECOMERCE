@@ -424,3 +424,71 @@ with different network access.
 
 **Next task:** see NEXT_TASK.md — real-data verification, then Stage 5
 (cart).
+
+## Session 1 (continued) — Stage 5: Cart
+
+**What I did:**
+- Applied `supabase/migrations/0007_cart.sql`: `carts` (user_id OR
+  guest_token, exactly one via CHECK constraint) and `cart_items`
+  (quantity, unique per cart+product). Verified via `list_tables` and
+  `get_advisors` — two expected INFO-level "RLS enabled, no policy"
+  findings (deliberate, documented) and one unrelated WARN
+  (leaked-password-protection disabled, logged for later, not fixed now
+  since it's out of scope for this migration).
+- Built `apps/api/app/cart/`: identity resolution (`CartIdentity`,
+  supporting both a verified JWT and a client-supplied `X-Cart-Token`
+  guest UUID), and the router (`GET /cart`, `POST /cart/items`,
+  `PATCH/DELETE /cart/items/{product_id}`). Added `get_optional_user` to
+  `app.auth.security` for the guest-or-authenticated case (returns `None`
+  instead of raising 401 when no token is present, but still raises 401
+  for a present-but-invalid token — a typo'd token shouldn't silently
+  downgrade someone to an empty guest cart).
+- Pricing is looked up server-side from `products.price_cents` both when
+  adding an item (to validate it's active) and when reading the cart (so
+  price changes are reflected, not stale) — one test specifically proves
+  the response price isn't influenced by anything in the request, since
+  `CartItemAdd` has no price field at all.
+
+**Two real bugs found by actually running things, not just writing code:**
+1. Wrote 12 cart tests using the same `httpx.MockTransport` pattern as
+   earlier modules — all passed on the first real run (35/35 total). No
+   bug here, but worth noting the pattern continues to work well.
+2. Booted the real server and hit `/cart` with a guest token but no
+   `SUPABASE_SERVICE_ROLE_KEY` configured — cart is the first set of
+   endpoints reachable without prior authentication, so it's the first
+   place this could be hit directly instead of being masked by an earlier
+   401. `service_client()` correctly raises `RuntimeError`, but nothing
+   caught it — leaked as an unhandled 500. Fixed at the single shared
+   choke point, `app.core.postgrest_deps.get_service_client` (the
+   dependency every admin-write endpoint AND cart uses), so the fix
+   covers all of them, not just cart. Re-verified on the real server:
+   missing key → clean 503, key present but network unreachable → clean
+   502 (the pre-existing, already-correct behavior for that case).
+
+**Verification performed:**
+- Fresh-venv `pytest`: 36/36 passing. `ruff check .` clean.
+- Booted the real server: confirmed all cart routes present in
+  `/openapi.json`, `GET /cart` without any identity returns 400 with a
+  clear message, both failure modes above (503 misconfigured, 502
+  unreachable) confirmed via curl.
+
+**Files changed:** `supabase/migrations/0007_cart.sql` (new),
+`apps/api/app/auth/security.py` (added `get_optional_user`),
+`apps/api/app/cart/` (new: `__init__.py`, `schemas.py`, `identity.py`,
+`router.py`), `apps/api/app/main.py`, `apps/api/app/core/postgrest_deps.py`
+(bug fix), `apps/api/tests/test_cart.py` (new, 12 tests),
+`apps/api/tests/test_supabase_client.py` (1 new test for the bug fix),
+`docs/DECISIONS.md` (3 new entries), `docs/PROJECT_STATE.md`,
+`docs/NEXT_TASK.md`.
+
+**Not yet done / explicitly not claimed:**
+- Real-data verification against live Supabase (same recurring
+  limitation) — no real cart has been created against the actual database
+  from any environment yet.
+- No cart UI in `apps/web` yet — `/cart` page, "add to cart" button on
+  product pages, guest-token persistence (localStorage) all still to do.
+- Guest→authenticated cart merge-on-login is not designed or built yet —
+  explicitly flagged as real business logic to plan, not just wire up.
+
+**Next task:** see NEXT_TASK.md — real-data verification, cart UI, and the
+guest-cart merge logic.

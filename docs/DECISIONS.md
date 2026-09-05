@@ -156,3 +156,40 @@ fix. Small thing, but it's the kind of error that would have silently
 broken the entire app (every route fails to register, not just delete) had
 it shipped — worth noting so a future session doesn't reintroduce it on
 a new delete endpoint.
+
+## 2026-09-05 — Cart tables have RLS enabled with zero policies (deliberate deny-all)
+Unlike products/categories, `carts`/`cart_items` have no anon/authenticated
+RLS policies at all — RLS is enabled, which with no policies means
+default-deny for those roles. All cart access goes through apps/api using
+the service-role client, which enforces authorization in application code
+(matching the verified JWT's user id for authenticated carts, matching a
+caller-supplied guest_token for guest carts). This is stricter than the
+products/categories pattern because cart data is per-visitor state, not
+shared catalog data — there's no safe "anyone can read this" policy to
+write the way `is_active = true` worked for products. Supabase's security
+advisor flags this as an INFO-level "RLS enabled, no policy" finding,
+which is expected and correct here, not a gap to fill.
+
+## 2026-09-05 — Noted but deferred: leaked password protection disabled
+Supabase's security advisor flagged `auth_leaked_password_protection` as
+disabled (WARN level) — an Auth-project-level setting (checks new
+passwords against HaveIBeenPwned), unrelated to this session's migration
+work. Not fixed now since it's an Auth configuration change, not a schema
+change, and out of scope for Stage 5. Logged here so it's not forgotten;
+revisit in Stage 12 (Security Audit) or sooner if convenient.
+
+## 2026-09-05 — Second real bug from booting the real server: unconfigured service-role key leaked as unhandled 500
+Cart is the first set of endpoints reachable without prior authentication
+(guests can use it), so it's the first place a misconfigured/missing
+`SUPABASE_SERVICE_ROLE_KEY` could be hit directly by a real, unauthenticated
+request rather than being masked by an earlier 401. Booting the real
+server without that env var set surfaced exactly that: `service_client()`
+correctly raises `RuntimeError`, but nothing caught it, so it leaked as an
+unhandled 500. Fixed at the single shared choke point
+(`app.core.postgrest_deps.get_service_client`, the FastAPI dependency
+every admin-write and cart endpoint uses) rather than wrapping each route
+individually — now returns a clean structured 503. This is the same
+"boot the real process, not just the mocked test suite" lesson as the
+earlier `httpx.HTTPStatusError` vs `httpx.HTTPError` bug in Stage 4;
+recorded here so it's clear this is a recurring, effective verification
+step, not a one-off.

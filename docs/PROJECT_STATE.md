@@ -3,11 +3,13 @@
 Last updated: 2026-09-03 (session 1, continued)
 
 ## Current Stage
-STAGE 4 — PRODUCT CATALOG (admin CRUD now complete: GET/POST/PATCH/DELETE
-for both products and categories, GET /products/{slug}, storefront /shop +
-/products/[slug] pages — 27/27 tests passing). STAGE 3 fully closed:
-password recovery flow built (forgot-password → email → /auth/confirm →
-reset-password), session refresh confirmed wired into every request via
+STAGE 5 — CART (built: schema + API, 36/36 tests passing; real-data
+verification still pending, same recurring sandbox network limitation).
+STAGE 4 complete (admin CRUD: GET/POST/PATCH/DELETE for both products and
+categories, GET /products/{slug}, storefront /shop + /products/[slug]
+pages). STAGE 3 fully closed: password recovery flow built (forgot-password
+→ email → /auth/confirm → reset-password), session refresh confirmed
+wired into every request via
 proxy.ts (was already code-complete since the initial slice, re-verified),
 RBAC-gated example satisfied by Stage 4's require_role pattern. Only the
 full login-round-trip re-check with an existing account (a Stage 3 item)
@@ -109,6 +111,26 @@ useful to build it against a real endpoint than a throwaway example).
   Booted the real server and confirmed via curl: all 7 routes present in
   `/openapi.json` with correct methods, PATCH/DELETE both correctly
   return 401 without auth. `apps/web` build/lint re-confirmed unaffected.
+- STAGE 5 — CART: `supabase/migrations/0007_cart.sql` applied and
+  verified (`carts` + `cart_items`, RLS enabled with deliberately zero
+  anon/authenticated policies — deny-all by design, since cart access
+  goes exclusively through apps/api's service-role client with
+  authorization enforced in application code; documented in DECISIONS.md).
+  `apps/api/app/cart/` built: `GET /cart`, `POST /cart/items`,
+  `PATCH /cart/items/{id}`, `DELETE /cart/items/{id}`, supporting both
+  guest carts (X-Cart-Token header) and authenticated carts (JWT) via a
+  shared identity-resolution helper. Pricing is always looked up
+  server-side from `products.price_cents` at both add-time and read-time
+  — a test explicitly proves the response price isn't influenced by
+  anything the client sent. 36/36 tests passing (up from 27). Caught and
+  fixed a second real bug via booting the actual server (not just the
+  mocked suite): an unconfigured `SUPABASE_SERVICE_ROLE_KEY` raised an
+  unhandled 500 instead of a clean error, since cart is the first
+  endpoint set reachable without prior authentication. Fixed at the
+  single shared dependency (`get_service_client`) so every admin-write
+  and cart endpoint benefits, not just cart. Re-verified both failure
+  modes (misconfigured key → 503, key present but network unreachable →
+  502) behave correctly on the real running server.
 
 ## What Is Partially Complete
 Stage 3's initial slice was verified for real by the user on their own

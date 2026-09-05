@@ -94,3 +94,18 @@ def get_current_user(
         ) from exc
 
     return VerifiedUser(claims)
+
+
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+) -> VerifiedUser | None:
+    """
+    Like get_current_user, but returns None instead of raising 401 when no
+    token is present — for endpoints (like cart) that support both guest
+    and authenticated access. A present-but-invalid token still raises 401
+    rather than silently falling back to guest, so a typo'd/expired token
+    doesn't quietly downgrade someone to an empty guest cart.
+    """
+    if credentials is None or not credentials.credentials:
+        return None
+    return get_current_user(credentials)

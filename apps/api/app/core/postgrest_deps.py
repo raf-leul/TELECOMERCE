@@ -20,8 +20,26 @@ def get_anon_client() -> Iterator[httpx.Client]:
 
 
 def get_service_client() -> Iterator[httpx.Client]:
-    with service_client() as client:
-        yield client
+    try:
+        with service_client() as client:
+            yield client
+    except RuntimeError as exc:
+        # service_client() raises RuntimeError if SUPABASE_SERVICE_ROLE_KEY
+        # isn't configured — a real bug found by booting the real server
+        # without that env var set (see docs/DECISIONS.md): this wasn't
+        # caught anywhere and leaked as an unhandled 500. Every endpoint
+        # using get_service_client (products/categories writes, all of
+        # cart) goes through this one place, so fixing it here covers all
+        # of them at once rather than wrapping each route individually.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "error": {
+                    "code": "SERVICE_MISCONFIGURED",
+                    "message": "This operation is temporarily unavailable.",
+                }
+            },
+        ) from exc
 
 
 def translate_postgrest_error(exc: Exception) -> HTTPException:

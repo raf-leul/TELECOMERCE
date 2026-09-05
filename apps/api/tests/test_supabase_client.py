@@ -37,3 +37,23 @@ def test_service_client_without_key_configured_raises(monkeypatch):
 
     with pytest.raises(RuntimeError):
         supabase_client.service_client()
+
+
+def test_get_service_client_dependency_returns_503_not_500(monkeypatch):
+    """
+    Confirms the FastAPI dependency wrapper (app.core.postgrest_deps.
+    get_service_client) translates the RuntimeError from a missing
+    service-role key into a clean 503, rather than crashing with an
+    unhandled 500 — a real bug found by booting the actual server without
+    SUPABASE_SERVICE_ROLE_KEY set (see docs/DECISIONS.md).
+    """
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    monkeypatch.setattr(settings, "supabase_service_role_key", "")
+    response = TestClient(app).get(
+        "/cart", headers={"X-Cart-Token": "11111111-1111-1111-1111-111111111111"}
+    )
+    assert response.status_code == 503
+    assert response.json()["detail"]["error"]["code"] == "SERVICE_MISCONFIGURED"
