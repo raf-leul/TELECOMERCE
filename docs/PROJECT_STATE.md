@@ -150,7 +150,7 @@ documented a real sandbox limitation (no network path to *.supabase.co from
 this environment) that caps how much of it can be verified here.
 
 ## Latest Commit
-c3fea01 (feat: Stage 4 CRUD completeness — PATCH/DELETE for products and categories) — pushed to origin/main, CI green
+aed440f (fix: recreate missing 0007_cart.sql migration to match live schema exactly) — pushed to origin/main, CI green
 
 ## Current Branch
 main
