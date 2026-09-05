@@ -128,7 +128,7 @@ documented a real sandbox limitation (no network path to *.supabase.co from
 this environment) that caps how much of it can be verified here.
 
 ## Latest Commit
-2ab2ff9 (feat: close out Stage 3 — password recovery flow (forgot/reset password, auth confirm route)) — pushed to origin/main, CI green
+c3fea01 (feat: Stage 4 CRUD completeness — PATCH/DELETE for products and categories) — pushed to origin/main, CI green
 
 ## Current Branch
 main
