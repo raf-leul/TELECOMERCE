@@ -372,3 +372,55 @@ entries), `docs/PROJECT_STATE.md`.
 
 **Stage 3 status:** now considered closed, modulo the always-honest caveat
 that a real end-to-end email-click test hasn't been run by anyone yet.
+
+## Session 1 (continued) — Stage 4 CRUD completeness: PATCH/DELETE
+
+**What I did:**
+Added PATCH and DELETE for both `products` and `categories`, gated by the
+same `require_role("admin", "owner")` pattern as the existing POST
+endpoints. Added `ProductUpdate`/`CategoryUpdate` schemas (all fields
+optional, so PATCH only applies what's actually provided via
+`exclude_unset=True`).
+
+**A real bug caught immediately by running the test suite (not by
+writing code and assuming it worked):** FastAPI raised
+`AssertionError: Status code 204 must not have a response body` at
+route-registration time — meaning the entire app failed to even start,
+not just the new delete routes. Fixed by adding `response_model=None`
+alongside `status_code=204` on both delete routes. This is documented in
+DECISIONS.md as a "watch out for this again" note, since it's an easy
+mistake to reintroduce on a future delete endpoint.
+
+**Verification performed:**
+- Fresh-venv `pytest`: 27/27 passing (up from 19 before this addition).
+- `ruff check .` clean.
+- Booted the real server and confirmed via `/openapi.json`: all 7 routes
+  present with the correct HTTP methods
+  (`/products` GET+POST, `/products/{slug}` GET, `/products/{product_id}`
+  PATCH+DELETE, same shape for categories). Confirmed PATCH/DELETE both
+  correctly return 401 without a token.
+- Re-ran `npm run web:build`/`web:lint` to confirm the frontend was
+  unaffected by backend-only changes — still clean.
+
+**Also handled this session:** user hit a real environment issue trying to
+run `apps/api` locally — their Python is 3.14, and the pinned
+`pydantic-core==2.9.2` has no pre-built wheel for it yet, so pip tried to
+compile it from Rust source and failed (missing MSVC linker). Advised
+using Python 3.12 instead via `py -3.12 -m venv .venv`. Not yet confirmed
+this resolved it — user moved on to continue Stage 4 building instead of
+finishing that local setup in this session.
+
+**Files changed:** `apps/api/app/products/schemas.py`,
+`apps/api/app/products/router.py`, `apps/api/app/categories/schemas.py`,
+`apps/api/app/categories/router.py`, `apps/api/tests/test_products.py`
+(6 new tests), `apps/api/tests/test_categories.py` (3 new tests),
+`docs/DECISIONS.md`, `docs/PROJECT_STATE.md`, `docs/NEXT_TASK.md`.
+
+**Not yet done / explicitly not claimed:** real-data verification against
+live Supabase (same recurring sandbox limitation) — this is now the only
+thing left to fully close Stage 4's CRUD scope, and it needs the user's
+machine (once the Python 3.14 issue above is resolved) or a future session
+with different network access.
+
+**Next task:** see NEXT_TASK.md — real-data verification, then Stage 5
+(cart).

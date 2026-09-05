@@ -164,3 +164,121 @@ def test_create_category_succeeds_for_admin(_patch_jwks, rsa_keypair):
         app.dependency_overrides.clear()
         fake_role_lookup_client.close()
         fake_write_client.close()
+
+
+def test_update_category_succeeds_for_admin(_patch_jwks, rsa_keypair):
+    private_key, _ = rsa_keypair
+    token = _make_token(private_key, "cccccccc-cccc-cccc-cccc-cccccccccccc")
+
+    def profile_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"role": "admin"}])
+
+    fake_role_lookup_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(profile_handler),
+    )
+
+    def patch_handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PATCH"
+        assert request.url.params["id"] == "eq.c1"
+        return httpx.Response(
+            200,
+            json=[{"id": "c1", "name": "Renamed", "slug": "renamed", "parent_category_id": None}],
+        )
+
+    fake_write_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(patch_handler),
+    )
+
+    import app.auth.rbac as rbac_module
+
+    orig_rbac_service_client = rbac_module.service_client
+    rbac_module.service_client = lambda: fake_role_lookup_client
+
+    def _fake_service_client():
+        yield fake_write_client
+
+    app.dependency_overrides[categories_router.get_service_client] = _fake_service_client
+    try:
+        response = TestClient(app).patch(
+            "/categories/c1",
+            json={"name": "Renamed", "slug": "renamed"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["slug"] == "renamed"
+    finally:
+        rbac_module.service_client = orig_rbac_service_client
+        app.dependency_overrides.clear()
+        fake_role_lookup_client.close()
+        fake_write_client.close()
+
+
+def test_delete_category_requires_admin_role(_patch_jwks, rsa_keypair):
+    private_key, _ = rsa_keypair
+    token = _make_token(private_key, "dddddddd-dddd-dddd-dddd-dddddddddddd")
+
+    def profile_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"role": "customer"}])
+
+    fake_role_lookup_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(profile_handler),
+    )
+
+    import app.auth.rbac as rbac_module
+
+    orig = rbac_module.service_client
+    rbac_module.service_client = lambda: fake_role_lookup_client
+    try:
+        response = TestClient(app).delete(
+            "/categories/c1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 403
+    finally:
+        rbac_module.service_client = orig
+        fake_role_lookup_client.close()
+
+
+def test_delete_category_succeeds_for_admin(_patch_jwks, rsa_keypair):
+    private_key, _ = rsa_keypair
+    token = _make_token(private_key, "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")
+
+    def profile_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"role": "owner"}])
+
+    fake_role_lookup_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(profile_handler),
+    )
+
+    def delete_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"id": "c1"}])
+
+    fake_write_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(delete_handler),
+    )
+
+    import app.auth.rbac as rbac_module
+
+    orig_rbac_service_client = rbac_module.service_client
+    rbac_module.service_client = lambda: fake_role_lookup_client
+
+    def _fake_service_client():
+        yield fake_write_client
+
+    app.dependency_overrides[categories_router.get_service_client] = _fake_service_client
+    try:
+        response = TestClient(app).delete(
+            "/categories/c1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204
+    finally:
+        rbac_module.service_client = orig_rbac_service_client
+        app.dependency_overrides.clear()
+        fake_role_lookup_client.close()
+        fake_write_client.close()

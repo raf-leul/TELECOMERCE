@@ -282,3 +282,204 @@ def test_get_product_by_slug_not_found_returns_404():
     finally:
         app.dependency_overrides.clear()
         fake_client.close()
+
+
+def test_update_product_requires_admin_role(_patch_jwks, rsa_keypair):
+    private_key, _ = rsa_keypair
+    token = _make_token(private_key, "77777777-7777-7777-7777-777777777777")
+
+    def profile_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"role": "customer"}])
+
+    fake_role_lookup_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(profile_handler),
+    )
+
+    import app.auth.rbac as rbac_module
+
+    orig = rbac_module.service_client
+    rbac_module.service_client = lambda: fake_role_lookup_client
+    try:
+        response = TestClient(app).patch(
+            "/products/p1",
+            json={"price_cents": 500},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 403
+    finally:
+        rbac_module.service_client = orig
+        fake_role_lookup_client.close()
+
+
+def test_update_product_succeeds_for_admin(_patch_jwks, rsa_keypair):
+    private_key, _ = rsa_keypair
+    token = _make_token(private_key, "88888888-8888-8888-8888-888888888888")
+
+    def profile_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"role": "admin"}])
+
+    fake_role_lookup_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(profile_handler),
+    )
+
+    def patch_handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PATCH"
+        assert request.url.params["id"] == "eq.p1"
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "id": "p1",
+                    "name": "Updated Widget",
+                    "slug": "updated-widget",
+                    "description": None,
+                    "price_cents": 750,
+                    "is_active": True,
+                    "category_id": None,
+                }
+            ],
+        )
+
+    fake_write_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(patch_handler),
+    )
+
+    import app.auth.rbac as rbac_module
+
+    orig_rbac_service_client = rbac_module.service_client
+    rbac_module.service_client = lambda: fake_role_lookup_client
+
+    def _fake_service_client():
+        yield fake_write_client
+
+    app.dependency_overrides[products_router.get_service_client] = _fake_service_client
+    try:
+        response = TestClient(app).patch(
+            "/products/p1",
+            json={"price_cents": 750},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 200
+        assert response.json()["price_cents"] == 750
+    finally:
+        rbac_module.service_client = orig_rbac_service_client
+        app.dependency_overrides.clear()
+        fake_role_lookup_client.close()
+        fake_write_client.close()
+
+
+def test_update_product_with_no_fields_is_400(_patch_jwks, rsa_keypair):
+    private_key, _ = rsa_keypair
+    token = _make_token(private_key, "99999999-9999-9999-9999-999999999999")
+
+    def profile_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"role": "admin"}])
+
+    fake_role_lookup_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(profile_handler),
+    )
+
+    import app.auth.rbac as rbac_module
+
+    orig = rbac_module.service_client
+    rbac_module.service_client = lambda: fake_role_lookup_client
+    try:
+        response = TestClient(app).patch(
+            "/products/p1",
+            json={},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 400
+    finally:
+        rbac_module.service_client = orig
+        fake_role_lookup_client.close()
+
+
+def test_delete_product_not_found_returns_404(_patch_jwks, rsa_keypair):
+    private_key, _ = rsa_keypair
+    token = _make_token(private_key, "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+
+    def profile_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"role": "owner"}])
+
+    fake_role_lookup_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(profile_handler),
+    )
+
+    def delete_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[])
+
+    fake_write_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(delete_handler),
+    )
+
+    import app.auth.rbac as rbac_module
+
+    orig_rbac_service_client = rbac_module.service_client
+    rbac_module.service_client = lambda: fake_role_lookup_client
+
+    def _fake_service_client():
+        yield fake_write_client
+
+    app.dependency_overrides[products_router.get_service_client] = _fake_service_client
+    try:
+        response = TestClient(app).delete(
+            "/products/does-not-exist",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 404
+    finally:
+        rbac_module.service_client = orig_rbac_service_client
+        app.dependency_overrides.clear()
+        fake_role_lookup_client.close()
+        fake_write_client.close()
+
+
+def test_delete_product_succeeds_for_admin(_patch_jwks, rsa_keypair):
+    private_key, _ = rsa_keypair
+    token = _make_token(private_key, "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+
+    def profile_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=[{"role": "admin"}])
+
+    fake_role_lookup_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(profile_handler),
+    )
+
+    def delete_handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "DELETE"
+        assert request.url.params["id"] == "eq.p1"
+        return httpx.Response(200, json=[{"id": "p1"}])
+
+    fake_write_client = httpx.Client(
+        base_url="https://test-project.supabase.co/rest/v1",
+        transport=httpx.MockTransport(delete_handler),
+    )
+
+    import app.auth.rbac as rbac_module
+
+    orig_rbac_service_client = rbac_module.service_client
+    rbac_module.service_client = lambda: fake_role_lookup_client
+
+    def _fake_service_client():
+        yield fake_write_client
+
+    app.dependency_overrides[products_router.get_service_client] = _fake_service_client
+    try:
+        response = TestClient(app).delete(
+            "/products/p1",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == 204
+    finally:
+        rbac_module.service_client = orig_rbac_service_client
+        app.dependency_overrides.clear()
+        fake_role_lookup_client.close()
+        fake_write_client.close()

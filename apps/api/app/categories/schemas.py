@@ -14,3 +14,11 @@ class CategoryCreate(BaseModel):
     name: str = Field(min_length=1)
     slug: str = Field(min_length=1)
     parent_category_id: str | None = None
+
+
+class CategoryUpdate(BaseModel):
+    """All fields optional — PATCH applies only what's provided."""
+
+    name: str | None = Field(default=None, min_length=1)
+    slug: str | None = Field(default=None, min_length=1)
+    parent_category_id: str | None = None

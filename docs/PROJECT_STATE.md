@@ -3,10 +3,10 @@
 Last updated: 2026-09-03 (session 1, continued)
 
 ## Current Stage
-STAGE 4 — PRODUCT CATALOG (in progress: GET/POST products, GET/POST
-categories, GET /products/{slug}, storefront /shop + /products/[slug]
-pages all built and tested). STAGE 3 now fully closed: password recovery
-flow built this session (forgot-password → email → /auth/confirm →
+STAGE 4 — PRODUCT CATALOG (admin CRUD now complete: GET/POST/PATCH/DELETE
+for both products and categories, GET /products/{slug}, storefront /shop +
+/products/[slug] pages — 27/27 tests passing). STAGE 3 fully closed:
+password recovery flow built (forgot-password → email → /auth/confirm →
 reset-password), session refresh confirmed wired into every request via
 proxy.ts (was already code-complete since the initial slice, re-verified),
 RBAC-gated example satisfied by Stage 4's require_role pattern. Only the
@@ -100,6 +100,15 @@ useful to build it against a real endpoint than a throwaway example).
   over time is not something this sandbox (or a quick test) can observe;
   noted as the one remaining thing about session refresh that's
   code-verified but not time-verified.
+- STAGE 4 CRUD COMPLETION: added PATCH/DELETE for both products and
+  categories, admin-gated via the same `require_role` pattern. Caught a
+  real bug that would have broken the ENTIRE app (not just delete) —
+  FastAPI raises an assertion error at startup if a `status_code=204`
+  route doesn't also set `response_model=None`; the test suite failed to
+  even collect until this was fixed. 27/27 tests passing (up from 19).
+  Booted the real server and confirmed via curl: all 7 routes present in
+  `/openapi.json` with correct methods, PATCH/DELETE both correctly
+  return 401 without auth. `apps/web` build/lint re-confirmed unaffected.
 
 ## What Is Partially Complete
 Stage 3's initial slice was verified for real by the user on their own

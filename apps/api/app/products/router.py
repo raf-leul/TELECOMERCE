@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from app.auth.rbac import require_role
 from app.core.postgrest_deps import get_anon_client, get_service_client
 from app.core.postgrest_deps import translate_postgrest_error as _translate_postgrest_error
-from app.products.schemas import ProductCreate, ProductOut
+from app.products.schemas import ProductCreate, ProductOut, ProductUpdate
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -102,3 +102,67 @@ def create_product(
             },
         )
     return rows[0]
+
+
+@router.patch(
+    "/{product_id}",
+    response_model=ProductOut,
+    dependencies=[Depends(require_role("admin", "owner"))],
+)
+def update_product(
+    product_id: str,
+    payload: ProductUpdate,
+    client: httpx.Client = Depends(get_service_client),
+) -> dict:
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": {
+                    "code": "NO_FIELDS_TO_UPDATE",
+                    "message": "Provide at least one field to update.",
+                }
+            },
+        )
+
+    try:
+        response = client.patch(
+            "/products",
+            params={"id": f"eq.{product_id}"},
+            json=changes,
+            headers={"Prefer": "return=representation"},
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _translate_postgrest_error(exc) from exc
+
+    rows = response.json()
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
+    return rows[0]
+
+
+@router.delete(
+    "/{product_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
+    dependencies=[Depends(require_role("admin", "owner"))],
+)
+def delete_product(
+    product_id: str,
+    client: httpx.Client = Depends(get_service_client),
+) -> None:
+    try:
+        response = client.delete(
+            "/products",
+            params={"id": f"eq.{product_id}"},
+            headers={"Prefer": "return=representation"},
+        )
+        response.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise _translate_postgrest_error(exc) from exc
+
+    rows = response.json()
+    if not rows:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")

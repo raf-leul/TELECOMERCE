@@ -145,3 +145,14 @@ near-duplicate handler later.
 regardless of whether `resetPasswordForEmail` actually found a matching
 user (Supabase's own API doesn't leak this either). Prevents using the
 password-reset form as a way to enumerate registered email addresses.
+
+## 2026-09-04 — PATCH/DELETE routes need response_model=None for 204 status
+Caught by actually running the test suite, not writing-and-assuming:
+FastAPI raises `AssertionError: Status code 204 must not have a response
+body` at route-registration time (app fails to even start) if a route
+declares `status_code=204` without also setting `response_model=None`.
+Both `DELETE /products/{id}` and `DELETE /categories/{id}` needed this
+fix. Small thing, but it's the kind of error that would have silently
+broken the entire app (every route fails to register, not just delete) had
+it shipped — worth noting so a future session doesn't reintroduce it on
+a new delete endpoint.

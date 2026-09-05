@@ -20,3 +20,14 @@ class ProductCreate(BaseModel):
     price_cents: int = Field(ge=0)
     category_id: str | None = None
     is_active: bool = True
+
+
+class ProductUpdate(BaseModel):
+    """All fields optional — PATCH applies only what's provided."""
+
+    name: str | None = Field(default=None, min_length=1)
+    slug: str | None = Field(default=None, min_length=1)
+    description: str | None = None
+    price_cents: int | None = Field(default=None, ge=0)
+    category_id: str | None = None
+    is_active: bool | None = None
