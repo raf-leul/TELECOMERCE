@@ -13,6 +13,7 @@ from app.auth.security import VerifiedUser, get_current_user
 from app.cart.router import router as cart_router
 from app.categories.router import router as categories_router
 from app.core.config import settings
+from app.orders.router import router as orders_router
 from app.products.router import router as products_router
 
 app = FastAPI(title=settings.app_name)
@@ -28,6 +29,7 @@ app.add_middleware(
 app.include_router(products_router)
 app.include_router(categories_router)
 app.include_router(cart_router)
+app.include_router(orders_router)
 
 
 @app.get("/health")

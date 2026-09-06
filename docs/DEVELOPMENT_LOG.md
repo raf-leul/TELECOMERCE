@@ -492,3 +492,67 @@ with different network access.
 
 **Next task:** see NEXT_TASK.md — real-data verification, cart UI, and the
 guest-cart merge logic.
+
+## Session 1 (continued) — Stage 6: Order Engine
+
+**What I did:**
+User asked to keep building through all remaining stages without testing
+until the very end. Built Stage 6 (Order Engine):
+
+- Applied `supabase/migrations/0008_orders.sql` (`orders`, `order_items`,
+  `order_status_history`), same deny-by-default RLS pattern as cart.
+  Verified via `list_tables` and `get_advisors` (only expected
+  INFO-level "no policy" notes, no new real findings).
+- Built `app/orders/state_machine.py`: the exact transition table from
+  master instructions section 13, as a plain dict + `is_valid_transition`
+  function — deliberately simple, no external state-machine library, since
+  the transition set is small and fixed.
+- Built `app/orders/router.py`: `POST /orders` (creates from the
+  authenticated user's cart; re-validates product availability and
+  re-reads price from the live catalog at checkout time rather than
+  trusting whatever the cart last showed, snapshots name+price+quantity,
+  records the initial status-history row, clears the cart), `GET /orders`
+  (own orders only), `GET /orders/{id}` (404 whether not-found or
+  not-owned, same non-leaking pattern as products), `PATCH
+  /orders/{id}/status` (admin/owner/staff-gated, validates against the
+  state machine, 409 on an illegal transition).
+- Wrote `tests/test_orders.py` (7 tests) and
+  `tests/test_order_state_machine.py` (4 tests) using the same
+  httpx.MockTransport pattern as every other module.
+
+**Verification performed:**
+- Fresh-venv `pytest`: 47/47 passing (up from 36) — first stage this
+  session where the initial full test run passed clean with no real bug
+  found along the way (previous stages each surfaced at least one real
+  issue: workspace lockfile mismatch, pytest import path, network-error
+  handling, a 204/response_model FastAPI assertion, a missing migration
+  file). Still ran the same rigor (fresh venv, real server boot) to make
+  sure this stage wasn't an exception due to under-testing.
+- `ruff check .` clean.
+- Booted the real server and confirmed via `/openapi.json`: all 4 order
+  routes present (`POST/GET /orders`, `GET /orders/{id}`,
+  `PATCH /orders/{id}/status`), and confirmed via curl that POST and PATCH
+  both correctly return 401 without a token.
+- Re-ran `npm run web:build`/`web:lint` — unaffected, still clean.
+
+**Key design decisions (see DECISIONS.md for full detail):** order items
+snapshot name/price at creation time (orders are historical records, not
+live views of the catalog); checkout requires authentication in this
+slice (guest checkout explicitly deferred, `orders.user_id` left nullable
+to leave room for it later); status transitions are validated against an
+explicit table, never trusting a client-sent "previous status."
+
+**Not yet done / explicitly not claimed:** real end-to-end order creation
+against live Supabase (same recurring sandbox network limitation — this
+is now the case for every stage from 2 onward, and per the user's explicit
+instruction is being deferred until all stages are built, then tested
+together in one pass).
+
+**Files changed:** `supabase/migrations/0008_orders.sql` (new),
+`apps/api/app/orders/` (new: `__init__.py`, `state_machine.py`,
+`schemas.py`, `router.py`), `apps/api/app/main.py`,
+`apps/api/tests/test_orders.py` (new),
+`apps/api/tests/test_order_state_machine.py` (new), `docs/DECISIONS.md`
+(2 new entries), `docs/PROJECT_STATE.md`, `docs/NEXT_TASK.md`.
+
+**Next task:** see NEXT_TASK.md — Stage 7 (payment system, mock provider).

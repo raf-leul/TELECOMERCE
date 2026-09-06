@@ -220,3 +220,30 @@ Lesson: "migration applied" and "migration file exists in git" are two
 separate facts that must both be checked — a green CI run and passing
 tests don't catch a missing schema file when the database itself already
 has the schema from a prior direct application.
+
+## 2026-09-06 — Order creation snapshots price/name; guest checkout deferred
+Order items copy `product_name`/`unit_price_cents` at the moment an order
+is created (not a live FK-only reference to `products`), because an order
+is a historical record of what was actually purchased — a later price
+change or product rename must not retroactively alter past orders. Prices
+are re-read from `products.price_cents` at checkout time (not taken from
+whatever the cart last showed), since a product could have been repriced
+or deactivated between "add to cart" and "place order."
+
+Checkout in this slice requires an authenticated user — there is no guest
+checkout yet, even though guest carts exist (Stage 5). A guest would need
+to register/log in before `POST /orders` succeeds (it depends on
+`get_current_user`, not the cart's optional-auth identity resolution).
+Guest checkout support (converting a guest cart into an order tied to a
+newly-created account, or an order with no user_id at all) is deferred —
+not scoped for this stage, and orders.user_id is nullable specifically to
+leave room for that later without a schema change.
+
+## 2026-09-06 — Order status transitions validated in code against master instructions section 13
+`app/orders/state_machine.py` hard-codes the exact transition table from
+the master instructions (PENDING_PAYMENT → PAID/CANCELLED, PAID →
+PROCESSING/CANCELLED/REFUNDED, etc.) rather than trusting any status
+string an admin sends. `PATCH /orders/{id}/status` looks up the order's
+current status fresh (not from a client-supplied "previous status") and
+checks the transition against this table before writing anything,
+returning 409 for an illegal jump (e.g. pending_payment → delivered).

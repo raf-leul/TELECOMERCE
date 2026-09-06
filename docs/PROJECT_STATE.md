@@ -3,11 +3,15 @@
 Last updated: 2026-09-05 (session 1, continued)
 
 ## Current Stage
-STAGE 5 — CART (built: schema + API, 36/36 tests passing; real-data
-verification still pending, same recurring sandbox network limitation).
-STAGE 4 complete (admin CRUD: GET/POST/PATCH/DELETE for both products and
-categories, GET /products/{slug}, storefront /shop + /products/[slug]
-pages). STAGE 3 fully closed: password recovery flow built (forgot-password
+STAGE 6 — ORDER ENGINE (built: schema + API, 47/47 tests passing; no bugs
+found this time — first stage where the fresh test run passed clean on
+the first try. Real-data verification still pending, same recurring
+sandbox network limitation).
+STAGE 5 complete (cart: schema + API, 36/36 tests, migration file gap
+found and fixed). STAGE 4 complete (admin CRUD: GET/POST/PATCH/DELETE for
+both products and categories, GET /products/{slug}, storefront /shop +
+/products/[slug] pages). STAGE 3 fully closed: password recovery flow
+built (forgot-password
 → email → /auth/confirm → reset-password), session refresh confirmed
 wired into every request via
 proxy.ts (was already code-complete since the initial slice, re-verified),
@@ -131,9 +135,22 @@ useful to build it against a real endpoint than a throwaway example).
   and cart endpoint benefits, not just cart. Re-verified both failure
   modes (misconfigured key → 503, key present but network unreachable →
   502) behave correctly on the real running server.
-
-## What Is Partially Complete
-Stage 5's cart migration file was recreated this session after being
+- STAGE 6 — ORDER ENGINE: `supabase/migrations/0008_orders.sql` applied
+  and verified (`orders`, `order_items`, `order_status_history` — same
+  deny-by-default RLS pattern as cart). `apps/api/app/orders/` built:
+  `POST /orders` (creates an order from the authenticated user's cart,
+  re-validates product availability and re-reads price from the live
+  catalog rather than trusting the cart snapshot, snapshots
+  name+price+quantity into order_items, records initial status history,
+  clears the cart), `GET /orders` (own orders only), `GET /orders/{id}`
+  (404 if not found OR not owned — same non-leaking pattern as products),
+  `PATCH /orders/{id}/status` (admin/owner/staff only, validates the
+  transition against `app/orders/state_machine.py`'s explicit table from
+  master instructions section 13, rejects illegal jumps with 409). 47/47
+  tests passing (up from 36) — first stage where the fresh test run
+  passed clean without finding a real bug along the way. Booted the real
+  server and confirmed all 4 order routes exist and correctly return 401
+  without auth. `apps/web` build/lint re-confirmed unaffected.
 discovered missing from the repo (see DECISIONS.md) — now verified to
 exactly match the live, already-applied schema, including direct testing
 of every constraint (owner-exclusivity, per-user/per-guest-token
