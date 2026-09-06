@@ -167,7 +167,7 @@ documented a real sandbox limitation (no network path to *.supabase.co from
 this environment) that caps how much of it can be verified here.
 
 ## Latest Commit
-aed440f (fix: recreate missing 0007_cart.sql migration to match live schema exactly) — pushed to origin/main, CI green
+ead0861 (feat: Stage 6 — order engine (create from cart, state machine, admin status updates)) — pushed to origin/main, CI green
 
 ## Current Branch
 main
