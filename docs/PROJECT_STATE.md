@@ -190,7 +190,7 @@ documented a real sandbox limitation (no network path to *.supabase.co from
 this environment) that caps how much of it can be verified here.
 
 ## Latest Commit
-ead0861 (feat: Stage 6 — order engine (create from cart, state machine, admin status updates)) — pushed to origin/main, CI green
+83923be (feat: Stage 7 — payment system (mock provider, idempotent webhook)) — pushed to origin/main, CI green
 
 ## Current Branch
 main
