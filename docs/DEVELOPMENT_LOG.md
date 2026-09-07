@@ -556,3 +556,72 @@ together in one pass).
 (2 new entries), `docs/PROJECT_STATE.md`, `docs/NEXT_TASK.md`.
 
 **Next task:** see NEXT_TASK.md — Stage 7 (payment system, mock provider).
+
+## Session 1 (continued) — Stage 7: Payment System (mock provider)
+
+**What I did:**
+Built Stage 7 per master instructions section 7's explicit guidance for
+when a real local payment provider isn't available: a `PaymentProvider`
+abstraction plus one concrete `MockPaymentProvider`, clearly labeled
+sandbox-only throughout its own docstrings so it can never be mistaken
+for something that processes real money.
+
+- Applied `supabase/migrations/0009_payments.sql` (`payments`,
+  `payment_events` with `UNIQUE(provider, provider_event_id)` for
+  idempotency), same deny-by-default RLS pattern as cart/orders. Verified
+  via `list_tables` and `get_advisors` (only expected INFO notes).
+- `app/payments/provider.py`: the ABC interface, with a docstring
+  explicitly listing what a real provider integration would need to add
+  (signature verification, real credentials) — not just an implicit gap.
+- `app/payments/mock_provider.py`: `create_payment()` always returns
+  "pending" (never auto-succeeds) specifically so the webhook-driven
+  completion path is genuinely exercised rather than bypassed.
+- `app/payments/router.py`: `POST /orders/{id}/pay` (must own the order,
+  order must be `pending_payment`) and `POST /payments/webhook`
+  (idempotent — inserts the event row into `payment_events` BEFORE any
+  payment/order mutation, so the database's own unique constraint is what
+  prevents double-processing, not an in-memory check that two concurrent
+  requests could both slip past).
+- Test files (`test_mock_payment_provider.py`, `test_payments.py`) were
+  already substantially written from earlier in the session — reviewed
+  them for correctness before trusting them (Rule 1), found them sound,
+  particularly the idempotency test's approach of making the mock
+  transport raise an `AssertionError` if a duplicate webhook delivery ever
+  reaches the order/payment update calls a second time.
+
+**Verification performed:**
+- Fresh-venv `pytest`: 57/57 passing (up from 47), including the
+  webhook-idempotency test actually proving what it claims.
+- `ruff check .` clean.
+- Booted the real server, confirmed all payment routes exist via
+  `/openapi.json`, confirmed `POST /orders/{id}/pay` returns 401 without
+  auth.
+- Investigated (rather than assumed) an odd result: a malformed
+  `POST /payments/webhook` body against this sandbox's server returned 503
+  instead of the expected 422. Didn't file it as a bug without checking —
+  used `TestClient` with a working fake `get_service_client` override to
+  confirm the real, production-relevant behavior (service client actually
+  configured) correctly returns 422 with proper per-field errors, and
+  never even reaches the backend. The 503 was a FastAPI
+  dependency-resolution-order artifact specific to this sandbox's missing
+  `SUPABASE_SERVICE_ROLE_KEY`, not an application bug. Documented in
+  DECISIONS.md so a future session doesn't re-investigate this as a
+  mystery.
+- Re-ran `npm run web:build`/`web:lint` — unaffected, still clean.
+
+**Not yet done / explicitly not claimed:** real end-to-end payment flow
+against live Supabase (same recurring network limitation, deferred per
+the user's instruction to test everything together at the end). No real
+payment provider — explicitly out of scope until a real provider account
+exists, per master instructions section 7.
+
+**Files changed:** `supabase/migrations/0009_payments.sql` (new),
+`apps/api/app/payments/` (new: `__init__.py`, `provider.py`,
+`mock_provider.py`, `schemas.py`, `router.py`), `apps/api/app/main.py`,
+`apps/api/tests/test_mock_payment_provider.py` (new),
+`apps/api/tests/test_payments.py` (new, reviewed existing work),
+`docs/DECISIONS.md` (3 new entries), `docs/PROJECT_STATE.md`,
+`docs/NEXT_TASK.md`.
+
+**Next task:** see NEXT_TASK.md — Stage 8 (Telegram bot, calling the same
+apps/api endpoints as the web app).

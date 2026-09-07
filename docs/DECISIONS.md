@@ -247,3 +247,39 @@ string an admin sends. `PATCH /orders/{id}/status` looks up the order's
 current status fresh (not from a client-supplied "previous status") and
 checks the transition against this table before writing anything,
 returning 409 for an illegal jump (e.g. pending_payment → delivered).
+
+## 2026-09-06 — Payments: mock provider is webhook-driven, not auto-succeeding
+`MockPaymentProvider.create_payment()` always returns status "pending",
+deliberately never auto-succeeding, so the webhook-driven completion path
+(`POST /payments/webhook`) actually gets exercised the same way a real
+asynchronous provider would drive it — auto-succeeding at create-time
+would make it easy to accidentally ship an order-completion path that only
+works with a provider that behaves nothing like a real one.
+
+## 2026-09-06 — Webhook idempotency via a UNIQUE constraint, not an in-memory check
+`payment_events` has `UNIQUE(provider, provider_event_id)` (migration
+0009). The webhook handler inserts the event row FIRST, before touching
+`payments`/`orders` at all; if PostgREST reports a 409 conflict, the
+handler stops immediately and returns the current state unchanged. This
+means the idempotency guarantee lives in the database's own constraint,
+not in an in-memory cache or a query-then-insert race condition that two
+concurrent webhook deliveries could both pass. Tested directly: the same
+event id posted twice must reach `payment_events` twice (both attempts
+recorded) but must only reach `PATCH /payments` and `PATCH /orders` once —
+enforced in the test by making the mock transport raise if those paths are
+hit on what should be the already-processed second delivery.
+
+## 2026-09-06 — Discovered: dependency-resolution order can mask a 422 with a 503
+Found while manually verifying `POST /payments/webhook` with a malformed
+body against the real (unconfigured, in this sandbox) server: it returned
+503 instead of the expected 422. Investigated rather than assuming it was
+a bug — confirmed via TestClient with a working fake `get_service_client`
+override that the *real* production-relevant behavior (service client
+configured) correctly returns 422 with proper field errors, and never even
+calls the backend. The 503 only happens because FastAPI resolves
+non-body dependencies (like `get_service_client`, which raises when the
+service-role key isn't configured) before finishing body validation, and
+an exception raised during dependency resolution short-circuits before
+validation errors are collected. This is expected FastAPI behavior, not
+an app bug — worth knowing so a future session doesn't chase this as a
+real issue if the same sandbox limitation makes it visible again.

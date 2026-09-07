@@ -3,12 +3,12 @@
 Last updated: 2026-09-05 (session 1, continued)
 
 ## Current Stage
-STAGE 6 — ORDER ENGINE (built: schema + API, 47/47 tests passing; no bugs
-found this time — first stage where the fresh test run passed clean on
-the first try. Real-data verification still pending, same recurring
-sandbox network limitation).
-STAGE 5 complete (cart: schema + API, 36/36 tests, migration file gap
-found and fixed). STAGE 4 complete (admin CRUD: GET/POST/PATCH/DELETE for
+STAGE 7 — PAYMENT SYSTEM (built: schema + PaymentProvider abstraction +
+MockPaymentProvider (sandbox-only, clearly labeled) + idempotent webhook,
+57/57 tests passing, including the critical webhook-replayed-twice test).
+STAGE 6 complete (order engine: schema + API, 47/47 tests, no bugs found —
+first clean stage). STAGE 5 complete (cart: schema + API, 36/36 tests,
+migration file gap found and fixed). STAGE 4 complete (admin CRUD: GET/POST/PATCH/DELETE for
 both products and categories, GET /products/{slug}, storefront /shop +
 /products/[slug] pages). STAGE 3 fully closed: password recovery flow
 built (forgot-password
@@ -151,6 +151,29 @@ useful to build it against a real endpoint than a throwaway example).
   passed clean without finding a real bug along the way. Booted the real
   server and confirmed all 4 order routes exist and correctly return 401
   without auth. `apps/web` build/lint re-confirmed unaffected.
+- STAGE 7 — PAYMENT SYSTEM: `supabase/migrations/0009_payments.sql`
+  applied and verified (`payments`, `payment_events` — same deny-by-default
+  RLS pattern). `apps/api/app/payments/`: a `PaymentProvider` ABC (
+  `create_payment`/`verify_payment`/`handle_webhook`/`refund`) and one
+  concrete `MockPaymentProvider`, explicitly labeled sandbox-only —
+  documented exactly what a real provider integration would additionally
+  need (signature verification, real credentials). `POST /orders/{id}/pay`
+  (owner-only, only from `pending_payment`, creates a `pending` payment —
+  deliberately never auto-succeeds so the webhook path is genuinely
+  exercised). `POST /payments/webhook`: idempotent via
+  `payment_events`' `UNIQUE(provider, provider_event_id)` constraint — the
+  event insert happens BEFORE any payment/order mutation, so a replayed
+  webhook is caught by the database constraint itself, not an in-memory
+  check. 57/57 tests passing (up from 47), including a test that makes the
+  mock transport raise an `AssertionError` if a duplicate webhook delivery
+  ever reaches the order/payment update calls a second time. Investigated
+  (not assumed) an odd 503-instead-of-422 result when testing a malformed
+  webhook body against this sandbox's unconfigured server; confirmed via
+  TestClient with a working fake service client that the real,
+  production-relevant behavior correctly returns 422 — the 503 was purely
+  a FastAPI dependency-resolution-order artifact specific to this
+  sandbox's missing service-role key, not an app bug (documented in
+  DECISIONS.md so it isn't re-investigated as a mystery later).
 discovered missing from the repo (see DECISIONS.md) — now verified to
 exactly match the live, already-applied schema, including direct testing
 of every constraint (owner-exclusivity, per-user/per-guest-token
