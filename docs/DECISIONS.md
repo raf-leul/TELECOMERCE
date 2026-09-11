@@ -283,3 +283,36 @@ an exception raised during dependency resolution short-circuits before
 validation errors are collected. This is expected FastAPI behavior, not
 an app bug — worth knowing so a future session doesn't chase this as a
 real issue if the same sandbox limitation makes it visible again.
+
+## 2026-09-06 — Telegram bot uses guest cart (deterministic token), not authenticated cart
+The bot maps each Telegram user id to a stable UUID via `uuid5` (a fixed
+namespace + the numeric Telegram id), used as the `X-Cart-Token` header
+for apps/api's existing guest-cart path. This was chosen over building
+Telegram-to-Supabase account linking in this same slice, because account
+linking is a genuine design decision (how does a Telegram user prove
+they're also a registered web user — a linking code? OAuth-style deep
+link? something else?) that deserves its own stage, not a quick add
+alongside browsing/cart. `orders.user_id` (Stage 6) and the deterministic
+guest-token approach both leave room for real linking later without a
+schema change: a linked Telegram user would eventually authenticate and
+use the normal authenticated-cart path instead.
+
+## 2026-09-06 — Bot checkout/order-history are honest placeholders, not silent failures
+`POST /orders` and `GET /orders` both require an authenticated Supabase
+access token (Stage 6 decision), which the bot has no way to obtain
+without the account-linking flow above. Rather than attempting a checkout
+that would just fail with a 401, or silently doing nothing, the
+`my_orders_callback`/`checkout_callback` handlers directly tell the user
+this isn't available yet and to use the website instead. This matches the
+project's honesty principle (master instructions section 62) applied to
+end-user-facing behavior, not just development-session reporting.
+
+## 2026-09-06 — Bot's only path to data is apps/api, verified by test design
+Every `bot.services.api_client` function is a thin httpx call to an
+apps/api endpoint — no Supabase client exists anywhere in `apps/bot`. This
+is enforced by the module's own docstring and verified indirectly: the
+test suite mocks HTTP responses at the apps/api boundary
+(`httpx.MockTransport`), so if a handler ever bypassed `api_client` and
+called Supabase directly, those tests would need a different mock target
+entirely — the current tests would simply not exercise that path, making
+such a regression visible by omission during any future test review.

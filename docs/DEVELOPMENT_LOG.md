@@ -625,3 +625,69 @@ exists, per master instructions section 7.
 
 **Next task:** see NEXT_TASK.md — Stage 8 (Telegram bot, calling the same
 apps/api endpoints as the web app).
+
+## Session 1 (continued) — Stage 8: Telegram Bot
+
+**What I did:**
+Built the Telegram bot per master instructions section 16 — critically,
+as a thin client of the SAME apps/api endpoints the web app uses, not a
+separate implementation of catalog/cart/order logic.
+
+- Checked current python-telegram-bot docs before writing any handler
+  code (Rule 10) — confirmed v22.x's `ApplicationBuilder`/`CommandHandler`/
+  `CallbackQueryHandler`/`ContextTypes` pattern (stable since v20, still
+  current).
+- `bot/services/api_client.py`: every function is a thin httpx call to an
+  apps/api endpoint (categories, products, cart, orders, pay) — no
+  Supabase client anywhere in this app, by design and enforced by test
+  structure (tests mock at the apps/api HTTP boundary).
+- `bot/services/identity.py`: deterministic `uuid5(telegram_user_id)` →
+  guest cart token, so the bot can use apps/api's existing guest-cart path
+  (Stage 5) without needing account linking for basic browsing/cart use.
+- `bot/handlers/{start,products,cart,orders}.py` + `bot/keyboards/menus.py`
+  + `bot/main.py`: `/start`, inline-keyboard category → product → detail
+  → add-to-cart flow, cart viewing — all fully functional against the
+  guest-cart path.
+- Checkout and order-history handlers are deliberate, honest placeholders:
+  both require an authenticated Supabase session (Stage 6 decision), which
+  the bot has no way to get without a real account-linking flow. Rather
+  than attempting a call that would 401, or silently no-op'ing, they
+  directly tell the user this isn't available yet.
+
+**Verification performed:**
+- Fresh-venv `pytest`: 12/12 passing — identity derivation (same user →
+  same token, different users → different tokens, valid UUID format),
+  the API client wrapper (mocked HTTP, asserting correct paths/headers/
+  bodies), and handler logic (mocked Telegram `Update`/`CallbackQuery`
+  objects via `unittest.mock`, including a test proving the browse handler
+  degrades gracefully — shows an error message, doesn't crash — when
+  apps/api is unreachable).
+- `ruff check .` clean (caught and fixed one unused-import lint issue).
+- Actually built the real `Application` object (not just imported the
+  module) and confirmed all 10 handlers registered. Confirmed a missing
+  `TELEGRAM_BOT_TOKEN` env var fails with a clear `KeyError`, not a
+  cryptic crash somewhere deep in python-telegram-bot's internals.
+- Added a `bot` job to `.github/workflows/ci.yml` (lint + test, same
+  pattern as the `api` job). Re-verified `apps/api` (57/57) and `apps/web`
+  (build + lint) were unaffected by this addition before pushing.
+
+**Not yet done / explicitly not claimed:** no real Telegram Bot API token
+exists anywhere in this environment (would need @BotFather + a real
+account), so actual message delivery, real webhook behavior, and the bot
+actually running against Telegram's servers have NEVER been verified —
+only the unit/mock-level logic above. This is the most significant
+"unverified" item so far, since every other stage's unverified gap is
+"real data against real Supabase" while this one is "the entire bot
+against the entire external platform." Documented clearly rather than
+implied to work.
+
+**Files changed:** `apps/bot/` (entirely new: `bot/__init__.py`,
+`bot/main.py`, `bot/handlers/{start,products,cart,orders}.py`,
+`bot/keyboards/menus.py`, `bot/services/{api_client,identity}.py`,
+`bot/states/__init__.py`, `bot/middleware/__init__.py`,
+`requirements/{base,dev}.txt`, `pytest.ini`, `tests/*`),
+`.github/workflows/ci.yml` (new `bot` job), `docs/DECISIONS.md` (3 new
+entries), `docs/PROJECT_STATE.md`, `docs/NEXT_TASK.md`.
+
+**Next task:** see NEXT_TASK.md — Stage 9 (admin dashboard in apps/web,
+first real UI consumer of the RBAC pattern).

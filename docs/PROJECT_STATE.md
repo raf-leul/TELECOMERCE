@@ -3,7 +3,13 @@
 Last updated: 2026-09-05 (session 1, continued)
 
 ## Current Stage
-STAGE 7 — PAYMENT SYSTEM (built: schema + PaymentProvider abstraction +
+STAGE 8 — TELEGRAM BOT (built: apps/bot scaffolded per master instructions
+structure, browsing/cart via the SAME apps/api endpoints as the web app,
+checkout/order-history honestly gated behind not-yet-built account
+linking, 12/12 tests passing). No real Telegram bot token exists in this
+environment — live behavior against real Telegram has NOT been verified,
+only unit/mock-level.
+STAGE 7 complete (payment system: schema + PaymentProvider abstraction +
 MockPaymentProvider (sandbox-only, clearly labeled) + idempotent webhook,
 57/57 tests passing, including the critical webhook-replayed-twice test).
 STAGE 6 complete (order engine: schema + API, 47/47 tests, no bugs found —
@@ -174,6 +180,33 @@ useful to build it against a real endpoint than a throwaway example).
   a FastAPI dependency-resolution-order artifact specific to this
   sandbox's missing service-role key, not an app bug (documented in
   DECISIONS.md so it isn't re-investigated as a mystery later).
+- STAGE 8 — TELEGRAM BOT: `apps/bot/` scaffolded per master instructions
+  section 16's structure (handlers/keyboards/services/states/middleware).
+  `bot/services/api_client.py` is the bot's ONLY path to data — thin httpx
+  wrappers calling the SAME apps/api endpoints the web app uses (products,
+  categories, cart, orders), never Supabase directly, proving the "one
+  backend, many channels" architecture principle for real rather than
+  just in documentation. `bot/services/identity.py` derives a stable
+  guest-cart token from a Telegram user's numeric id (uuid5), so the same
+  user always gets the same cart across messages without a mapping table.
+  `/start` + inline-keyboard browsing (categories → products → detail →
+  add to cart) fully implemented and working against the guest-cart path.
+  Checkout and order-history are HONEST PLACEHOLDERS: both require an
+  authenticated Supabase session, which the bot can't obtain without a
+  real account-linking flow (explicitly deferred — a genuine design
+  decision, not a shortcut), so the handlers directly tell the user this
+  isn't available yet rather than failing silently or faking success.
+  12/12 tests passing: identity derivation, the API client wrapper (mocked
+  HTTP, verifying correct headers/paths/bodies sent to apps/api), and
+  handler logic (mocked Telegram Update/CallbackQuery objects, including a
+  test proving graceful degradation — not a crash — when apps/api is
+  unreachable). Actually built the real `Application` object and confirmed
+  all 10 handlers register correctly; confirmed a missing
+  `TELEGRAM_BOT_TOKEN` fails with a clear error rather than a cryptic one.
+  Added a `bot` job to `.github/workflows/ci.yml`. NOT verified: real
+  behavior against the actual Telegram Bot API — no real bot token exists
+  in this environment, so live message delivery/webhook behavior has
+  never been exercised, only unit/mock-level logic.
 discovered missing from the repo (see DECISIONS.md) — now verified to
 exactly match the live, already-applied schema, including direct testing
 of every constraint (owner-exclusivity, per-user/per-guest-token

@@ -2,62 +2,54 @@
 
 ## Immediate next task (single executable unit)
 
-STAGE 8 — Telegram bot (proves the "one backend, many channels"
-architecture for real).
+STAGE 9 — Admin dashboard (apps/web /admin routes).
 
-Per master instructions section 16-17: the bot is not a separate store —
-it must call the SAME apps/api endpoints already built (products, cart,
-orders, payments), not reimplement business logic.
+Built on top of the RBAC pattern (Stage 4) and the full CRUD API already
+in place (products, categories, orders, payments):
 
-1. `apps/bot/` (new): python-telegram-bot, webhook-based per master
-   instructions section 16, structured as
-   `bot/{handlers,keyboards,services,states,middleware}/main.py`.
-2. `/start` — welcome message + main menu (Browse Products, Cart, My
-   Orders, Account, Help).
-3. Product browsing: list categories → list products in a category →
-   product detail — all via HTTP calls to apps/api's `GET /categories`,
-   `GET /products`, `GET /products/{slug}`. No direct Supabase access from
-   the bot.
-4. Cart: add to cart, view cart — via apps/api's `GET/POST /cart*`
-   endpoints. Telegram users are guests from the API's point of view
-   unless account-linking exists (it doesn't yet — see below), so use the
-   guest cart path (X-Cart-Token), with the Telegram user's numeric id
-   deterministically mapped to a stable UUID for the token (so the same
-   Telegram user always gets the same cart across messages).
-5. Checkout: calls `POST /orders` then `POST /orders/{id}/pay` (mock
-   provider) — same as web, proving shared logic.
-6. Order status: `GET /orders` via the bot.
-7. Do NOT build: real Telegram-Supabase account linking (deferred —
-   requires deciding how a Telegram user proves they're also a registered
-   web user, which is a real design decision, not a quick add), admin
-   operations via the bot (Stage 9+ concern), or a real bot token/webhook
-   deployment (no real Telegram Bot API token exists in this environment —
-   build and unit-test the handler logic, note honestly that live
-   Telegram delivery hasn't been verified).
+1. `apps/web/app/admin/` — route group with a layout that checks
+   `profiles.role` (via a Server Component reading the Supabase session +
+   a profile lookup) and redirects non-admins away. This is the first
+   real UI consumer of the RBAC pattern that's existed API-side since
+   Stage 4.
+2. `/admin` — overview: counts of orders by status, revenue (sum of paid
+   orders' subtotal_cents), low-stock products (inventory.quantity_available
+   below some threshold), pulled from apps/api (add read endpoints if
+   apps/api doesn't already expose what's needed — don't query Supabase
+   directly from apps/web for this, same "shared backend" principle as
+   Stage 8's bot work).
+3. `/admin/products` — list + create/edit/delete UI wired to the existing
+   `GET/POST/PATCH/DELETE /products` endpoints.
+4. `/admin/orders` — list + status-update UI wired to `GET /orders` (note:
+   this currently only returns the OWN user's orders — will need an
+   admin-scoped `GET /orders` variant or a query param, since an admin
+   needs to see ALL orders, not just their own. Design this properly,
+   don't just remove the ownership filter for admins without deciding
+   how that's gated).
+5. Do NOT build customer management, coupons, or full analytics charts
+   yet — explicitly scoped for later per master instructions section 22
+   (start with the core dashboard, not every listed widget at once).
 
 ## Definition of done for this task
-- `apps/bot` scaffolded with the structure above
-- Handlers built calling real apps/api endpoints (via httpx), tested with
-  mocked HTTP responses (same rigor as apps/api's own test suite)
-- Guest-cart-via-deterministic-token approach implemented and tested
-- Explicitly documented: no real Telegram token/webhook exists in this
-  environment, so end-to-end bot behavior against real Telegram has NOT
-  been verified — this needs a real bot token (from @BotFather) and a
-  reachable webhook URL, neither available here
-- Commit message: `feat: Stage 8 — Telegram bot (shared backend, no duplicated business logic)`
-- Pushed to origin/main, CI confirmed green (add a bot test job to
-  ci.yml if apps/bot has its own Python dependencies)
+- `apps/api` changes (if any, e.g. an admin-scoped orders endpoint) tested
+  the same rigorous way as every other endpoint (unit tests + real server
+  boot check)
+- `/admin` pages built, route-protected, tested via `npm run web:build`/
+  `web:lint`, and a real dev-server boot-and-curl check confirming
+  non-admins/unauthenticated visitors are redirected
+- Commit message: `feat: Stage 9 — admin dashboard (overview, products, orders)`
+- Pushed to origin/main, CI confirmed green
 - PROJECT_STATE.md and this file updated afterward
 
 ## Still open (real-data verification backlog, not blocking further stages)
 Every stage from 2 onward has unit/mock-level verification but not a real
 end-to-end run against live Supabase from any environment. Per the user's
-explicit instruction, this is deferred until all stages are built, then
+explicit instruction, this is deferred until ALL stages are built, then
 tested together as one pass. Also still open: a real Telegram bot token
-test (Stage 8), a real payment provider (explicitly out of scope until a
-provider account exists).
+test (Stage 8), a real payment provider (Stage 7, needs a real account),
+Telegram account linking (Stage 8, deferred design decision).
 
 ## After this task
-Stage 9 — Admin dashboard: revenue/orders/customers/products views in
-apps/web's /admin routes, built on the RBAC pattern and CRUD endpoints
-already in place.
+Stage 10 — Notifications: email abstraction, Telegram notifications (the
+bot can now actually push messages, not just respond to them), in-app
+notifications for order status changes.
