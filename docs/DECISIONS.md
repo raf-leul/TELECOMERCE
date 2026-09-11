@@ -316,3 +316,18 @@ test suite mocks HTTP responses at the apps/api boundary
 called Supabase directly, those tests would need a different mock target
 entirely — the current tests would simply not exercise that path, making
 such a regression visible by omission during any future test review.
+
+## 2026-09-06 — CI broke entirely: duplicate `bot:` job key from a botched edit, not caught before push
+Pushing Stage 8 broke ALL of CI (not just the new bot job) — GitHub
+reported the run as `conclusion: failure` with zero jobs at all, which is
+what happens when the workflow YAML itself fails to parse. Root cause: an
+earlier `str_replace` edit to add the `bot` CI job ended up applied
+multiple times across the session (visible only by diffing the actually
+pushed file against what was intended), producing six duplicate `bot:`
+job blocks — invalid YAML (duplicate mapping keys). This should have been
+caught before pushing by actually validating the YAML file
+(`python3 -c "import yaml; yaml.safe_load(open(...))"`), which is now
+part of the checklist for any future CI file edit — a git diff review
+alone didn't make the duplication obvious enough. Fixed by rewriting the
+file from scratch (not patching) and validating it parses to exactly one
+`bot` key before committing.
