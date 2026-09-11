@@ -223,7 +223,7 @@ documented a real sandbox limitation (no network path to *.supabase.co from
 this environment) that caps how much of it can be verified here.
 
 ## Latest Commit
-83923be (feat: Stage 7 — payment system (mock provider, idempotent webhook)) — pushed to origin/main, CI green
+3465ddb (fix: CI workflow YAML had duplicate 'bot' job keys, breaking the entire pipeline) — pushed to origin/main, CI green (all 3 jobs: web, api, bot)
 
 ## Current Branch
 main
