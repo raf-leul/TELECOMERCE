@@ -691,3 +691,70 @@ entries), `docs/PROJECT_STATE.md`, `docs/NEXT_TASK.md`.
 
 **Next task:** see NEXT_TASK.md — Stage 9 (admin dashboard in apps/web,
 first real UI consumer of the RBAC pattern).
+
+## Session 1 (continued) — Stage 9: Admin Dashboard
+
+**What I did:**
+Built the first real UI consumer of the RBAC pattern that's existed
+API-side since Stage 4 — an admin dashboard in `apps/web` backed by three
+new `apps/api` endpoints.
+
+- `apps/api/app/admin/router.py`: `GET /admin/products` (all products,
+  bypassing the public RLS active-only filter — the whole point of an
+  admin view), `GET /admin/orders` (all orders across all users, bypassing
+  the regular per-user ownership filter), `GET /admin/overview` (order
+  counts by status + revenue, aggregated in Python from fetched rows —
+  deliberately simple for current scale, documented as revisitable).
+  All three gated at the router level via a single
+  `dependencies=[Depends(require_role(...))]` on the `APIRouter`, so the
+  gate can't be forgotten on an individual endpoint.
+- `apps/web/app/admin/layout.tsx`: the actual role gate — checks auth +
+  `profiles.role` once, every nested `/admin/*` page inherits it via
+  Next.js layout nesting. Redirects non-admins to `/` rather than showing
+  a 403 (doesn't confirm/deny the route's existence to an unauthorized
+  logged-in user).
+- `/admin` (overview stats), `/admin/products` (list + toggle active +
+  delete, wired to the existing Stage 4 endpoints), `/admin/orders` (list
+  + status-update dropdown, wired to the Stage 6 state-machine-validated
+  endpoint).
+
+**A real bug caught by the build, not assumed away:** the first version of
+`app/admin/actions.ts` mirrored the Stage 3 auth forms' pattern (Server
+Actions returning `{error: string} | undefined` for inline error display).
+`npm run build` failed with a TypeScript error: `<form action={...}>`
+requires a function returning `void | Promise<void>`, not a typed object.
+Fixed by simplifying the admin actions to throw on failure (surfacing via
+Next.js's default error boundary) rather than converting every admin row
+into a client component with `useActionState` just to preserve the
+richer inline-error pattern — a deliberate tradeoff for batch admin
+utility actions, documented in DECISIONS.md rather than silently done.
+
+**Verification performed:**
+- Fresh-venv `pytest`: 61/61 passing (up from 57), including a test that
+  checks the actual aggregation arithmetic (specific revenue number from
+  specific input rows, not just "the endpoint returns 200") and a test
+  confirming inactive products ARE included in the admin product list
+  (the opposite of the public endpoint's behavior — asserting the RLS
+  bypass actually works as intended, not accidentally still filtered).
+- `ruff check .` clean. Booted the real API server, confirmed all 3 admin
+  routes exist via `/openapi.json` and return 401 without auth.
+- `npm run web:build`/`web:lint` clean after the actions.ts fix.
+- Booted the real Next.js dev server and curl-tested `/admin` and
+  `/admin/products` unauthenticated — both correctly 307-redirect to
+  `/login`, proving the layout-level gate actually works end-to-end, not
+  just in the code.
+
+**Not yet done / explicitly not claimed:** real-data verification (same
+recurring network limitation — an admin actually viewing real orders/
+revenue/low-stock data has not been exercised). Customer management,
+coupons, and full analytics charts explicitly out of scope per master
+instructions section 22 (core dashboard first, not every widget at once).
+
+**Files changed:** `apps/api/app/admin/` (new: `__init__.py`,
+`schemas.py`, `router.py`), `apps/api/app/main.py`,
+`apps/api/tests/test_admin.py` (new), `apps/web/app/admin/` (new:
+`layout.tsx`, `page.tsx`, `actions.ts`, `products/page.tsx`,
+`orders/page.tsx`), `apps/web/lib/api/admin.ts` (new), `docs/DECISIONS.md`
+(3 new entries), `docs/PROJECT_STATE.md`, `docs/NEXT_TASK.md`.
+
+**Next task:** see NEXT_TASK.md — Stage 10 (notifications).

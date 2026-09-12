@@ -9,6 +9,7 @@ to verify the Supabase JWT-verification dependency end to end.
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.admin.router import router as admin_router
 from app.auth.security import VerifiedUser, get_current_user
 from app.cart.router import router as cart_router
 from app.categories.router import router as categories_router
@@ -32,6 +33,7 @@ app.include_router(categories_router)
 app.include_router(cart_router)
 app.include_router(orders_router)
 app.include_router(payments_router)
+app.include_router(admin_router)
 
 
 @app.get("/health")

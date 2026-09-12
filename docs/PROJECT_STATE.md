@@ -3,12 +3,15 @@
 Last updated: 2026-09-05 (session 1, continued)
 
 ## Current Stage
-STAGE 8 — TELEGRAM BOT (built: apps/bot scaffolded per master instructions
-structure, browsing/cart via the SAME apps/api endpoints as the web app,
-checkout/order-history honestly gated behind not-yet-built account
-linking, 12/12 tests passing). No real Telegram bot token exists in this
-environment — live behavior against real Telegram has NOT been verified,
-only unit/mock-level.
+STAGE 9 — ADMIN DASHBOARD (built: apps/api /admin/{products,orders,overview}
+endpoints, apps/web /admin/{,products,orders} pages with a layout-level
+RBAC gate, 61/61 API tests passing including a real aggregation-math
+test). STAGE 8 complete (Telegram bot: apps/bot scaffolded per master
+instructions structure, browsing/cart via the SAME apps/api endpoints as
+the web app, checkout/order-history honestly gated behind not-yet-built
+account linking, 12/12 tests passing). No real Telegram bot token exists
+in this environment — live behavior against real Telegram has NOT been
+verified, only unit/mock-level.
 STAGE 7 complete (payment system: schema + PaymentProvider abstraction +
 MockPaymentProvider (sandbox-only, clearly labeled) + idempotent webhook,
 57/57 tests passing, including the critical webhook-replayed-twice test).
@@ -207,6 +210,30 @@ useful to build it against a real endpoint than a throwaway example).
   behavior against the actual Telegram Bot API — no real bot token exists
   in this environment, so live message delivery/webhook behavior has
   never been exercised, only unit/mock-level logic.
+- STAGE 9 — ADMIN DASHBOARD: `apps/api/app/admin/router.py` — three
+  endpoints, all gated by `require_role("admin", "owner", "staff")`:
+  `GET /admin/products` (ALL products including inactive, unlike the
+  public RLS-filtered list), `GET /admin/orders` (all orders across all
+  users, unlike the regular ownership-filtered list), `GET /admin/overview`
+  (order counts by status, revenue — sum of subtotal_cents for
+  paid/processing/packed/shipped/delivered orders, explicitly excluding
+  pending/cancelled/refunded — and low-stock products below a
+  configurable threshold). 61/61 tests passing (up from 57), including a
+  test that verifies the aggregation math itself (specific revenue number
+  computed from specific input rows), not just that the endpoint returns
+  200. `apps/web/app/admin/`: a layout-level auth+role gate (checks
+  `profiles.role` once, every nested page inherits it — verified for real
+  by hitting `/admin` and `/admin/products` unauthenticated against a
+  running dev server and confirming both redirect to `/login`), an
+  overview page, a products page (toggle active/inactive, delete — wired
+  to the existing Stage 4 PATCH/DELETE endpoints), and an orders page
+  (status-update dropdown wired to the Stage 6 state-machine-validated
+  endpoint). Caught a real TypeScript build error (`<form action>`
+  requires a void-returning function; the first version returning a typed
+  error object didn't type-check) via `npm run build`, fixed by
+  simplifying admin actions to throw-on-failure rather than mirroring the
+  auth forms' inline-error pattern — documented as a deliberate tradeoff,
+  not an oversight.
 discovered missing from the repo (see DECISIONS.md) — now verified to
 exactly match the live, already-applied schema, including direct testing
 of every constraint (owner-exclusivity, per-user/per-guest-token

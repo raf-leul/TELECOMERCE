@@ -331,3 +331,38 @@ part of the checklist for any future CI file edit — a git diff review
 alone didn't make the duplication obvious enough. Fixed by rewriting the
 file from scratch (not patching) and validating it parses to exactly one
 `bot` key before committing.
+
+## 2026-09-06 — Admin overview aggregation in Python, not a SQL view/RPC
+`GET /admin/overview` fetches all orders' (status, subtotal_cents) and
+aggregates counts/revenue in Python rather than using a PostgreSQL
+aggregate query, view, or RPC function. Deliberately simple for the
+current data volume (master instructions section 64 — don't
+over-engineer); revisit with real SQL aggregation if/when fetching every
+order row becomes impractical at scale. Revenue is defined as the sum of
+`subtotal_cents` for orders in `{paid, processing, packed, shipped,
+delivered}` — explicitly excluding `pending_payment` (not yet paid),
+`cancelled`, and `refunded` (paid but returned).
+
+## 2026-09-06 — Admin route gate lives in the layout, not per-page
+`app/admin/layout.tsx` checks auth + `profiles.role` once and redirects
+non-admins to `/` (not a 403 page, so as not to confirm/deny the
+existence of admin routes to an unauthorized logged-in user) — every page
+under `/admin/*` inherits this automatically via Next.js's layout nesting,
+rather than each page re-implementing the same check. Verified this
+actually works by hitting `/admin` and `/admin/products` unauthenticated
+against a real running dev server and confirming both redirect.
+
+## 2026-09-06 — Admin Server Actions return void and throw, not a typed error object
+Unlike the Stage 3 auth forms (which use `useActionState` + a typed
+`{error: string} | undefined` return to show inline field errors),
+`app/admin/actions.ts` uses plain `<form action={...}>` with `void`-
+returning Server Actions that throw on failure. This was a real
+TypeScript build error caught by `npm run build`, not a stylistic choice
+made upfront: `<form action>` requires a function returning
+`void | Promise<void>`, and the first version (returning
+`{error: string} | undefined}` to mirror the auth forms) failed to type-
+check. Decided this simpler pattern (throw → Next.js's default error
+boundary) is appropriate for batch admin utility actions rather than
+converting every admin row into its own client component with
+`useActionState` just to preserve inline error styling — that tradeoff can
+be revisited if admins need more graceful in-place error messages later.
